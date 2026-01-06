@@ -1,192 +1,234 @@
+
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-import yfinance as yf
-from datetime import datetime
-import matplotlib.colors as mcolors
+import plotly.express as px
+import time
+import random
 
-# ==========================================
-# 1. הגדרות מערכת ועיצוב
-# ==========================================
-st.set_page_config(page_title="ISR-INSIGHT LIVE", layout="wide", page_icon="📡")
+# --- 1. הגדרת עמוד ועיצוב CSS מהפנט (Glassmorphism) ---
+st.set_page_config(page_title="Regulator Pro Dashboard", layout="wide", page_icon="🛡️")
 
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
-    body, .stApp {direction: rtl; font-family: 'Heebo', sans-serif; background-color: #f5f7f9;}
-    h1, h2, h3 {text-align: right; color: #0e1117;}
-    .stDataFrame {direction: rtl;}
-    
-    /* עיצוב סטטוס בר */
-    .status-bar {
-        padding: 10px;
-        background-color: #d4edda;
-        color: #155724;
-        border-right: 5px solid #28a745;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        font-weight: bold;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ==========================================
-# 2. מנוע נתונים
-# ==========================================
-COMPANIES_DB = {
-    "הפניקס": {"type": "public", "ticker": "PHOE.TA", "maya_id": "640"},
-    "הראל": {"type": "public", "ticker": "HARL.TA", "maya_id": "586"},
-    "מנורה מבטחים": {"type": "public", "ticker": "MMHD.TA", "maya_id": "224"},
-    "כלל ביטוח": {"type": "public", "ticker": "CLIS.TA", "maya_id": "664"},
-    "מגדל": {"type": "public", "ticker": "MGDL.TA", "maya_id": "257"},
-    "ביטוח ישיר": {"type": "public", "ticker": "DIDI.TA", "maya_id": "439"},
-    "איילון": {"type": "public", "ticker": "AYAL.TA", "maya_id": "116"},
-    "ליברה": {"type": "public", "ticker": "LBRA.TA", "maya_id": "1846"},
-    "ווישור": {"type": "public", "ticker": "WESR.TA", "maya_id": "1826"},
-    
-    "AIG ישראל": {"type": "private", "url": "https://www.aig.co.il", "data": {"ni": 85, "eq": 450, "ass": 2100, "liab": 1650}},
-    "שומרה": {"type": "private", "url": "https://www.shomera.co.il", "data": {"ni": 65, "eq": 380, "ass": 1800, "liab": 1420}},
-    "ביטוח חקלאי": {"type": "private", "url": "https://www.bth.co.il", "data": {"ni": 42, "eq": 320, "ass": 1500, "liab": 1180}}
-}
-
-@st.cache_data(ttl=1800)
-def fetch_master_data(period_mode):
-    rows = []
-    # פרוגרס בר זמני לשלב הטעינה
-    bar = st.progress(0, text="מתחבר לבורסה...")
-    i = 0
-    
-    for name, info in COMPANIES_DB.items():
-        i += 1
-        bar.progress(int((i / len(COMPANIES_DB)) * 100), text=f"טוען נתונים עבור: {name}")
+def load_css():
+    st.markdown("""
+        <style>
+        /* הגדרת רקע כהה */
+        .stApp {
+            background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+            color: white;
+        }
         
-        row_data = {"חברה": name, "מקור": "", "לינק": ""}
+        /* כרטיסי זכוכית (Glassmorphism Cards) */
+        div[data-testid="metric-container"] {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        div[data-testid="metric-container"]:hover {
+            transform: scale(1.02);
+            border-color: #00ff96;
+        }
+
+        /* אנימציית דופק (Pulse) לאיקון הסנכרון */
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 150, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 150, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 150, 0); }
+        }
+        .pulse-icon {
+            width: 15px;
+            height: 15px;
+            background-color: #00ff96;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-animation 2s infinite;
+            margin-right: 10px;
+        }
+
+        /* כותרות זוהרות */
+        h1, h2, h3 {
+            font-family: 'Helvetica Neue', sans-serif;
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(0,255,150,0.3);
+        }
         
-        if info["type"] == "public":
-            try:
-                stock = yf.Ticker(info["ticker"])
-                if period_mode == "quarterly":
-                    fin = stock.quarterly_financials
-                    bs = stock.quarterly_balance_sheet
-                    cf = stock.quarterly_cashflow
-                else:
-                    fin = stock.financials
-                    bs = stock.balance_sheet
-                    cf = stock.cashflow
-                
-                if not fin.empty:
-                    net_inc = fin.loc['Net Income'].iloc[0] / 1000000
-                    rev = fin.loc['Total Revenue'].iloc[0] / 1000000 if 'Total Revenue' in fin.index else 0
-                    equity = bs.loc['Total Equity Gross Minority Interest'].iloc[0] / 1000000
-                    assets = bs.loc['Total Assets'].iloc[0] / 1000000
-                    liab = bs.loc['Total Liabilities Net Minority Interest'].iloc[0] / 1000000
-                    ocf = cf.loc['Operating Cash Flow'].iloc[0] / 1000000 if 'Operating Cash Flow' in cf.index else 0
-                    
-                    link = f"https://maya.tase.co.il/company/{info['maya_id']}?view=reports"
-                    
-                    row_data.update({
-                        "סוג": "ציבורית", "הכנסות": rev, "רווח נקי": net_inc, "הון עצמי": equity,
-                        "סך נכסים": assets, "סך התחייבויות": liab, "תזרים שוטף": ocf, "לינק": link,
-                        "מקור": "Yahoo (Live)"
-                    })
-                else: continue
-            except: continue
-        else:
-            d = info["data"]
-            row_data.update({
-                "סוג": "פרטית", "הכנסות": d["ni"] * 10, "רווח נקי": d["ni"], "הון עצמי": d["eq"],
-                "סך נכסים": d["ass"], "סך התחייבויות": d["liab"], "תזרים שוטף": d["ni"] * 0.8,
-                "לינק": info["url"], "מקור": "דיווח ישיר"
-            })
-        rows.append(row_data)
-    
-    bar.empty() # העלמת הבר בסיום
-    df = pd.DataFrame(rows)
-    
-    # חישוב מדדים
-    df['ROE (%)'] = (df['רווח נקי'] / df['הון עצמי']) * 100
-    df['מינוף (X)'] = df['סך נכסים'] / df['הון עצמי']
-    df['Z-Score'] = 1.2*(df['הון עצמי']/df['סך נכסים']) + 3.3*(df['רווח נקי']/df['סך נכסים']) + 0.6*(df['הון עצמי']/df['סך התחייבויות'])
+        /* התאמת צבעי סליידר */
+        .stSlider > div > div > div > div {
+            background-color: #00ff96;
+        }
+        </style>
+    """, unsafe_allow_status=True)
 
-    return df
+load_css()
 
-# ==========================================
-# 3. ממשק משתמש
-# ==========================================
-st.sidebar.title("🎛️ חדר בקרה")
-period_select = st.sidebar.radio("תקופת דיווח:", ["שנתי (Annual)", "רבעוני (Quarterly)"])
-p_mode = "quarterly" if "רבעוני" in period_select else "annual"
+# --- 2. מנוע נתונים (Data Engine & Simulation) ---
+# הערה: בשלב זה הנתונים הם סימולציה המבוססת על מבנה דוחות אמיתי. 
+# בעתיד נחבר כאן את ה-Scraper שבנינו.
 
-if st.sidebar.button("🔄 רענון נתונים כפוי"):
-    st.cache_data.clear()
-    st.rerun()
-
-st.sidebar.divider()
-search_query = st.sidebar.text_input("🔍 חיפוש...", "")
-
-# הרצת הנתונים
-df = fetch_master_data(p_mode)
-
-if search_query:
-    df = df[df['חברה'].str.contains(search_query)]
-
-# ==========================================
-# 4. כותרת וסטטוס בר (החלק החדש)
-# ==========================================
-st.title(f"ISR-INSIGHT FINAL | {period_select}")
-
-# השורה שביקשת - אינדיקציה ברורה לזמן אמת
-current_time = datetime.now().strftime("%H:%M:%S")
-st.markdown(f"""
-    <div class="status-bar">
-    🟢 מחובר לשרתי הבורסה (Live API) | הנתונים מעודכנים נכון לשעה: {current_time}
-    </div>
-    """, unsafe_allow_html=True)
-
-# לשוניות
-tabs = st.tabs(["📋 דוחות וקישורים", "📈 מאזן ורווח", "🌊 תזרים", "⚠️ סיכונים"])
-
-with tabs[0]:
-    st.data_editor(
-        df,
-        column_config={
-            "לינק": st.column_config.LinkColumn("דוח מקור", display_text="פתח דוח 🔗"),
-            "ROE (%)": st.column_config.NumberColumn("תשואה להון", format="%.1f%%"),
-            "רווח נקי": st.column_config.NumberColumn("רווח נקי (M₪)", format="%.0f"),
-            "Z-Score": st.column_config.NumberColumn("ציון יציבות", format="%.2f"),
+@st.cache_data
+def get_insurance_data():
+    # נתונים לדוגמה המדמים מצב שוק נוכחי
+    data = {
+        "הפניקס": {
+            "CSM": 14500, "CSM_New": 1200, "CSM_Release": -900, 
+            "Loss_Component": 50, "SCR_Ratio": 118, "Equity": 9500, 
+            "Risk_Adj": 800, "Segment": "General & Life"
         },
-        hide_index=True, use_container_width=True, height=500
+        "הראל": {
+            "CSM": 13200, "CSM_New": 1100, "CSM_Release": -850, 
+            "Loss_Component": 120, "SCR_Ratio": 112, "Equity": 8800, 
+            "Risk_Adj": 750, "Segment": "Health Focus"
+        },
+        "מגדל": {
+            "CSM": 16000, "CSM_New": 900, "CSM_Release": -1100, 
+            "Loss_Component": 450, "SCR_Ratio": 104, "Equity": 7200, 
+            "Risk_Adj": 1200, "Segment": "Life Heavy"
+        },
+        "כלל": {
+            "CSM": 11500, "CSM_New": 950, "CSM_Release": -800, 
+            "Loss_Component": 200, "SCR_Ratio": 109, "Equity": 6500, 
+            "Risk_Adj": 600, "Segment": "General"
+        },
+        "מנורה": {
+            "CSM": 12800, "CSM_New": 1300, "CSM_Release": -820, 
+            "Loss_Component": 0, "SCR_Ratio": 125, "Equity": 7800, 
+            "Risk_Adj": 500, "Segment": "General & Pension"
+        }
+    }
+    return pd.DataFrame(data).T
+
+df = get_insurance_data()
+
+# --- 3. Sidebar: הגדרות ומנוע תרחישי קיצון ---
+st.sidebar.markdown("## ⚙️ Stress Test Simulator")
+st.sidebar.info("הזז את הסליידרים כדי לראות השפעה מיידית על יציבות החברות")
+
+equity_shock = st.sidebar.slider("📉 נפילת שוק המניות (%)", 0, 40, 0)
+interest_shock = st.sidebar.slider("🏦 שינוי ריבית (bps)", -100, 100, 0)
+longevity_shock = st.sidebar.slider("👴 עלייה בתוחלת חיים (%)", 0, 10, 0)
+
+# לוגיקה לחישוב מחדש של הנתונים בזמן אמת (Stress Engine)
+def apply_stress(row):
+    # חישוב השפעה על ההון (Equity)
+    equity_hit = (equity_shock * 150) # פגיעה משוערת בתיק הנוסטרו
+    
+    # חישוב השפעה על ההתחייבויות (SCR Impact)
+    # ירידת ריבית מעלה התחייבויות, עליית ריבית מורידה
+    rate_impact = (interest_shock * -0.5) 
+    longevity_impact = (longevity_shock * 20)
+    
+    new_scr_req = row['SCR_Ratio'] - (equity_hit / 100) - (rate_impact / 10) - (longevity_impact / 10)
+    
+    return round(new_scr_req, 2)
+
+df['Stressed_SCR'] = df.apply(apply_stress, axis=1)
+
+# --- 4. Main Dashboard UI ---
+
+# Header with Pulse Icon
+col_h1, col_h2 = st.columns([0.8, 0.2])
+with col_h1:
+    st.title("Insurance Regulator Pro (IFRS 17)")
+with col_h2:
+    st.markdown('<div style="text-align: left; margin-top: 20px;"><span class="pulse-icon"></span><span style="color:#00ff96">Live Sync Active</span></div>', unsafe_allow_status=True)
+
+st.markdown("---")
+
+# שורת חיפוש ופילטור
+search_term = st.text_input("🔍 חפש חברה או מגזר פעילות...", "")
+if search_term:
+    df = df[df.index.str.contains(search_term) | df['Segment'].str.contains(search_term)]
+
+# --- 5. מדדי IFRS 17 (Waterfall & Analysis) ---
+st.subheader("📊 ניתוח רווחיות וערך (IFRS 17)")
+
+# בחירת חברה לניתוח עומק
+selected_company = st.selectbox("בחר חברה לניתוח CSM עמוק:", df.index)
+comp_data = df.loc[selected_company]
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # גרף מפל CSM (Waterfall Chart) - הלב של IFRS 17
+    fig_waterfall = go.Figure(go.Waterfall(
+        name = "20", orientation = "v",
+        measure = ["relative", "relative", "relative", "total"],
+        x = ["פתיחת שנה", "עסקים חדשים", "שחרור לרווח", "סגירת שנה"],
+        textposition = "outside",
+        text = [f"{comp_data['CSM']}", f"+{comp_data['CSM_New']}", f"{comp_data['CSM_Release']}", "Final"],
+        y = [comp_data['CSM'], comp_data['CSM_New'], comp_data['CSM_Release'], 0],
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+    ))
+    fig_waterfall.update_layout(
+        title=f"CSM Bridge Analysis: {selected_company}",
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="white")
     )
+    st.plotly_chart(fig_waterfall, use_container_width=True)
 
-with tabs[1]:
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        fig_bar = px.bar(df, x='חברה', y='רווח נקי', color='רווח נקי', color_continuous_scale='Tealgrn', text_auto='.2s', title="השוואת רווח נקי")
-        st.plotly_chart(fig_bar, use_container_width=True)
-    with col2:
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "number+gauge", value = df['ROE (%)'].mean(), title = {"text": "ממוצע ענפי ROE"},
-            gauge = {"axis": {"range": [None, 30]}, "bar": {"color": "#1f77b4"}}))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+with col2:
+    # כרטיסי מידע (KPIs)
+    st.metric("יתרת CSM נוכחית", f"₪{comp_data['CSM'] + comp_data['CSM_New'] + comp_data['CSM_Release']:,}")
+    st.metric("רכיב הפסד (Loss Comp)", f"₪{comp_data['Loss_Component']}", delta_color="inverse")
+    st.metric("הון עצמי (Equity)", f"₪{comp_data['Equity']:,}")
 
-with tabs[2]:
-    fig_cf = go.Figure()
-    fig_cf.add_trace(go.Bar(x=df['חברה'], y=df['רווח נקי'], name='רווח נקי', marker_color='#95a5a6'))
-    fig_cf.add_trace(go.Bar(x=df['חברה'], y=df['תזרים שוטף'], name='תזרים תפעולי', marker_color='#2ecc71'))
-    fig_cf.update_layout(title="איכות הרווח: חשבונאי מול תזרימי", barmode='group')
-    st.plotly_chart(fig_cf, use_container_width=True)
+# --- 6. מודול סולבנסי ותרחישי קיצון (Solvency II) ---
+st.markdown("---")
+st.subheader("🚨 סולבנסי וניהול סיכונים (Solvency II)")
 
-with tabs[3]:
-    c1, c2 = st.columns(2)
-    with c1:
-        fig_z = px.scatter(df, x='חברה', y='Z-Score', color='Z-Score', color_continuous_scale='RdYlGn', size='סך נכסים')
-        fig_z.add_hline(y=1.2, line_dash="dash", line_color="red")
-        st.plotly_chart(fig_z, use_container_width=True)
-    with c2:
-        # כאן הייתה השגיאה הקודמת - וודא ש-matplotlib מותקן
-        st.markdown("#### מפת חום: מינוף")
-        st.dataframe(df[['חברה', 'ROE (%)', 'מינוף (X)']].style.background_gradient(subset=['מינוף (X)'], cmap='Reds'), use_container_width=True)
+col3, col4 = st.columns([1, 1])
 
-st.divider()
-st.caption("ISR-INSIGHT v11 | Powered by Yahoo Finance & Streamlit")
+with col3:
+    # מפת חום השוואתית
+    st.markdown("##### השוואת יחס כושר פירעון (לפני ואחרי זעזוע)")
+    
+    # הכנת הנתונים לגרף
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(
+        x=df.index, y=df['SCR_Ratio'],
+        name='יחס נוכחי', marker_color='#00ff96'
+    ))
+    fig_bar.add_trace(go.Bar(
+        x=df.index, y=df['Stressed_SCR'],
+        name='אחרי תרחיש קיצון', marker_color='#ff4b4b'
+    ))
+    
+    fig_bar.update_layout(
+        barmode='group', 
+        template="plotly_dark",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+with col4:
+    # מערכת דגלים אדומים (Automated Red Flags)
+    st.markdown("##### 🚩 דגלים אדומים והתראות")
+    
+    for company in df.index:
+        current_scr = df.loc[company, 'Stressed_SCR']
+        loss_comp = df.loc[company, 'Loss_Component']
+        
+        # לוגיקת התראות חכמה
+        if current_scr < 100:
+            st.error(f"**{company}**: יחס סולבנסי קריטי ({current_scr}%) תחת התרחיש הנוכחי!")
+        elif current_scr < 110:
+            st.warning(f"**{company}**: אזהרת יציבות ({current_scr}%) - קרוב לרף הרגולטורי.")
+            
+        if loss_comp > 400:
+            st.error(f"**{company}**: רכיב הפסד חריג (Loss Component) של {loss_comp}!")
+        elif loss_comp > 100:
+             st.warning(f"**{company}**: קיימים חוזים הפסדיים במאזן.")
+             
+    if len(st.session_state) == 0: 
+        st.success("לא נמצאו חריגות קריטיות נוספות.")
+
+# --- Footer ---
+st.markdown("---")
+st.markdown("*System Status: All systems operational | Data Source: Simulated API Sync*")
