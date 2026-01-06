@@ -4,6 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import time
+from datetime import datetime  # <--- התיקון: שורה זו הייתה חסרה
 
 # --- 1. הגדרת עמוד (חייב להיות ראשון) ---
 st.set_page_config(page_title="ISR-TITAN FINAL", layout="wide", page_icon="🏛️")
