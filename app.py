@@ -7,7 +7,7 @@ import yfinance as yf
 from datetime import datetime
 
 # ==========================================
-# 1. הגדרות מערכת ועיצוב ELITE
+# 1. הגדרות מערכת ועיצוב ELITE (High Contrast)
 # ==========================================
 st.set_page_config(page_title="ISR-TITAN ULTIMATE", layout="wide", page_icon="💎")
 
@@ -63,17 +63,15 @@ def load_css():
         .ratio-val { font-size: 1.2rem; font-weight: bold; color: var(--accent); }
         .ratio-lbl { font-size: 0.8rem; color: var(--text-med); }
 
-        /* סליידרים */
+        /* סליידרים וטאבים */
         .stSlider > div > div > div > div { background-color: var(--accent); }
-        .stSlider .stMarkdown { color: var(--accent) !important; font-weight: bold; }
-
-        /* טאבים */
         .stTabs [data-baseweb="tab-list"] { gap: 8px; }
         .stTabs [data-baseweb="tab"] { background-color: var(--card-bg); border: 1px solid #334155; color: var(--text-med); border-radius: 6px; }
         .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: var(--accent); color: #0f172a !important; font-weight: bold; }
         
         /* טבלאות */
         div[data-testid="stDataFrame"] { background-color: var(--card-bg); border: 1px solid #334155; }
+        div[data-testid="stDataFrame"] * { color: var(--text-high) !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -181,11 +179,11 @@ def run_advanced_simulation(data, shocks, period_factor):
     # 4. השפעת קטסטרופה
     cat_damage = 0
     if shocks['catastrophe']:
-        cat_damage = 400000000
+        cat_damage = 350000000 # נזק קטסטרופלי קבוע
         
     new_claims = data['claims_base'] + cat_damage
     
-    # 5. חישוב רווח והפסד (P&L)
+    # 5. חישוב רווח והפסד (P&L) לתקופה
     underwriting_result = (data['nwp'] * period_factor) - (new_claims * period_factor) - (data['expenses'] * period_factor)
     
     base_inv_income = data['assets'] * 0.04 * period_factor
@@ -303,25 +301,24 @@ with k4:
     st.markdown(f"""<div class="kpi-card"><div class="kpi-title">תשואה להון (ROE)</div><div class="kpi-val" style="color:{col}">{roe:.1f}%</div>
     <div style="font-size:0.8rem; color:#94a3b8;">בגילום שנתי</div></div>""", unsafe_allow_html=True)
 
-# --- פאנל יחסים פיננסיים (תיקון הבאג: הפרדת לוגיקת הצבע מהמחרוזת) ---
+# --- פאנל יחסים פיננסיים (שורת המדדים השנייה) ---
 st.markdown("### 📈 יחסים פיננסיים ותפעוליים (Financial Ratios)")
 r1, r2, r3, r4, r5 = st.columns(5)
 
+# פונקציית עזר ליחסים (תוקנה למניעת שגיאת תחביר)
 def ratio_box(col, title, value, suffix="%", good_thresh=None, invert=False):
-    # לוגיקת צבע מופרדת
-    text_color = "var(--text-high)"
+    color = "var(--text-high)"
     if good_thresh is not None:
         is_good = value > good_thresh if not invert else value < good_thresh
-        text_color = "#10b981" if is_good else "#f43f5e"
+        color = "#10b981" if is_good else "#f43f5e"
     
-    # מחרוזת פשוטה
-    box_html = f"""
+    html_content = f"""
     <div class="ratio-card">
         <div class="ratio-lbl">{title}</div>
-        <div class="ratio-val" style="color:{text_color}">{value:.1f}{suffix}</div>
+        <div class="ratio-val" style="color:{color}">{value:.1f}{suffix}</div>
     </div>
     """
-    col.markdown(box_html, unsafe_allow_html=True)
+    col.markdown(html_content, unsafe_allow_html=True)
 
 # 1. Combined Ratio
 ratio_box(r1, "Combined Ratio", sim_d['Combined_Ratio'], "%", 100, invert=True)
@@ -357,8 +354,42 @@ with t1:
     
     with c_r:
         st.markdown("#### תרומה ל-CSM לפי מגזר")
-        labels = list(base_d['segments'].keys())
-        values = list(base_d['segments'].values())
-        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5)])
-        fig_pie.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', showlegend=True, legend=dict(orientation="h", y=-0.2), height=350)
-        st.plotly_chart(fig_pie, use_container_width
+        # גרף שמש (Sunburst)
+        sb_labels = []
+        sb_parents = []
+        sb_values = []
+        for seg, val in base_d['segments'].items():
+            sb_labels.append(seg)
+            sb_parents.append("")
+            sb_values.append(val)
+            
+        fig_sun = go.Figure(go.Sunburst(
+            labels=sb_labels, parents=sb_parents, values=sb_values,
+            branchvalues="total"
+        ))
+        fig_sun.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=0, l=0, r=0, b=0))
+        st.plotly_chart(fig_sun, use_container_width=True)
+
+with t2:
+    # מאזן ויזואלי
+    st.markdown("#### מבנה מאזן (Simulated Balance Sheet)")
+    balance_df = pd.DataFrame({
+        "Sect": ["נכסים", "התחייבויות", "הון עצמי"],
+        "Value": [sim_d['Assets'], sim_d['Liabilities'], sim_d['Equity']],
+        "Color": ["#0ea5e9", "#f43f5e", "#10b981"]
+    })
+    fig_bar = px.bar(balance_df, x="Value", y="Sect", orientation='h', text_auto='.2s', color="Sect", color_discrete_sequence=balance_df["Color"])
+    fig_bar.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=250)
+    st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # טבלת נתונים מלאה
+    st.markdown("#### נתוני דוח מפורטים")
+    exp_df = pd.DataFrame([
+        {"Item": "Equity", "Value": fmt_money(sim_d['Equity'])},
+        {"Item": "Assets", "Value": fmt_money(sim_d['Assets'])},
+        {"Item": "Liabilities", "Value": fmt_money(sim_d['Liabilities'])},
+        {"Item": "Solvency Ratio", "Value": f"{sim_d['Solvency']:.1f}%"},
+        {"Item": "Combined Ratio", "Value": f"{sim_d['Combined_Ratio']:.1f}%"},
+        {"Item": "Net Income", "Value": fmt_money(sim_d['Net_Income'])},
+    ])
+    st.dataframe(exp_df, use_container_width=True)
