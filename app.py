@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,97 +8,126 @@ import yfinance as yf
 from datetime import datetime
 
 # ==========================================
-# 1. הגדרות מערכת ועיצוב ELITE (High Contrast)
+# 1. הגדרות מערכת ועיצוב אגרסיבי (High Contrast Forced)
 # ==========================================
-st.set_page_config(page_title="ISR-TITAN ULTIMATE", layout="wide", page_icon="💎")
+st.set_page_config(page_title="ISR-REGULATOR PRO", layout="wide", page_icon="⚖️")
 
 def load_css():
     st.markdown("""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
         
+        /* איפוס צבעים גלובלי - כפיית מצב כהה */
         :root {
-            --bg-dark: #0f172a;       /* Slate 900 */
-            --card-bg: #1e293b;       /* Slate 800 */
-            --text-high: #f8fafc;     /* לבן בוהק */
-            --text-med: #94a3b8;      /* אפור בהיר */
-            --accent: #0ea5e9;        /* תכלת */
-            --success: #10b981;       /* ירוק */
-            --danger: #f43f5e;        /* אדום */
-            --warning: #eab308;       /* צהוב */
+            --bg-color: #0e1117;
+            --card-color: #1f2937;
+            --text-color: #ffffff;
+            --accent-color: #00d4ff;
+            --success-color: #00ff9d;
+            --danger-color: #ff4b4b;
         }
         
+        /* רקע ראשי וטקסט */
         .stApp {
-            background-color: var(--bg-dark);
-            color: var(--text-high);
+            background-color: var(--bg-color);
+            color: var(--text-color);
             font-family: 'Heebo', sans-serif;
             direction: rtl;
         }
         
-        h1, h2, h3, h4, h5 { color: var(--text-high) !important; text-align: right; font-weight: 700; }
-        p, label, div, span { color: var(--text-high); text-align: right; }
-        
-        /* כרטיסי KPI ראשיים */
-        .kpi-card {
-            background-color: var(--card-bg);
-            border: 1px solid #334155;
-            border-right: 4px solid var(--accent);
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            transition: transform 0.2s;
-            height: 100%;
+        /* הבטחת קריאות טקסט */
+        h1, h2, h3, h4, h5, h6, p, div, span, label, li {
+            color: var(--text-color) !important;
+            text-align: right;
         }
-        .kpi-card:hover { transform: translateY(-3px); border-color: var(--text-high); }
-        .kpi-title { font-size: 0.8rem; color: var(--text-med); text-transform: uppercase; letter-spacing: 0.5px; }
-        .kpi-val { font-size: 1.6rem; font-weight: 800; color: var(--text-high); margin: 5px 0; }
         
-        /* כרטיסי יחסים פיננסיים */
-        .ratio-card {
-            background-color: rgba(30, 41, 59, 0.5);
-            border: 1px solid #334155;
-            border-radius: 6px;
+        /* כרטיסי KPI - עיצוב ברור וחד */
+        .kpi-card {
+            background-color: var(--card-color);
+            border: 1px solid #374151;
+            border-right: 5px solid var(--accent-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .kpi-title {
+            font-size: 0.9rem;
+            color: #9ca3af !important; /* אפור בהיר לכותרת */
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .kpi-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #ffffff !important;
+            display: block;
+        }
+        
+        /* כרטיסי יחסים פיננסיים (קטנים) */
+        .ratio-box {
+            background-color: rgba(31, 41, 55, 0.7);
+            border: 1px solid #374151;
+            border-radius: 5px;
             padding: 10px;
             text-align: center;
         }
-        .ratio-val { font-size: 1.2rem; font-weight: bold; color: var(--accent); }
-        .ratio-lbl { font-size: 0.8rem; color: var(--text-med); }
+        .ratio-val { font-size: 1.4rem; font-weight: bold; color: var(--accent-color) !important; }
+        .ratio-lbl { font-size: 0.85rem; color: #d1d5db !important; }
 
-        /* סליידרים וטאבים */
-        .stSlider > div > div > div > div { background-color: var(--accent); }
-        .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-        .stTabs [data-baseweb="tab"] { background-color: var(--card-bg); border: 1px solid #334155; color: var(--text-med); border-radius: 6px; }
-        .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: var(--accent); color: #0f172a !important; font-weight: bold; }
+        /* טבלאות - רקע כהה לטקסט בהיר */
+        div[data-testid="stDataFrame"] {
+            background-color: var(--card-color);
+            border: 1px solid #374151;
+        }
+        div[data-testid="stDataFrame"] * {
+            color: white !important;
+            background-color: var(--card-color) !important;
+        }
+
+        /* סרגל צד */
+        section[data-testid="stSidebar"] {
+            background-color: #111827;
+            border-left: 1px solid #374151;
+        }
         
-        /* טבלאות */
-        div[data-testid="stDataFrame"] { background-color: var(--card-bg); border: 1px solid #334155; }
-        div[data-testid="stDataFrame"] * { color: var(--text-high) !important; }
+        /* טאבים */
+        .stTabs [data-baseweb="tab"] {
+            color: #9ca3af;
+        }
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            color: var(--accent-color) !important;
+            border-top-color: var(--accent-color) !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
 load_css()
 
 # ==========================================
-# 2. מנוע נתונים מורחב (Comprehensive Data Engine)
+# 2. מנוע נתונים משולב (Combined Data Engine)
 # ==========================================
 
 TICKERS = {
     "הפניקס אחזקות": "PHOE.TA", "הראל השקעות": "HARL.TA", "מגדל ביטוח": "MGDL.TA",
     "מנורה מבטחים": "MMHD.TA", "כלל ביטוח": "CLIS.TA", "ביטוח ישיר": "DIDI.TA",
-    "איילון אחזקות": "AYAL.TA", "AIG ישראל": "PRIVATE", "שומרה": "PRIVATE", "ליברה": "LBRA.TA"
+    "איילון אחזקות": "AYAL.TA", "AIG ישראל": "PRIVATE", "שומרה": "PRIVATE"
 }
 
 @st.cache_data(ttl=600)
-def fetch_comprehensive_data(ticker_name):
+def fetch_full_data(ticker_name):
     symbol = TICKERS[ticker_name]
     is_live = False
     
-    # נתוני בסיס (Fallback)
-    market_cap = 4000000000
-    equity = 5000000000
+    # נתוני ברירת מחדל (Fallback)
+    market_cap = 4500000000
+    equity = 5200000000
     change_pct = 0.0
     
-    # 1. ניסיון שאיבה מהבורסה
+    # 1. חיבור לבורסה
     if symbol != "PRIVATE":
         try:
             stock = yf.Ticker(symbol)
@@ -105,39 +135,42 @@ def fetch_comprehensive_data(ticker_name):
             if 'marketCap' in info and info['marketCap']:
                 market_cap = info['marketCap']
                 equity = market_cap / info.get('priceToBook', 0.85)
-                if 'currentPrice' in info and 'previousClose' in info:
-                    prev = info['previousClose']
-                    if prev > 0:
-                        change_pct = ((info['currentPrice'] - prev) / prev) * 100
+                
+                # חישוב שינוי יומי
+                current = info.get('currentPrice', 0)
+                prev = info.get('previousClose', 0)
+                if prev > 0:
+                    change_pct = ((current - prev) / prev) * 100
                 is_live = True
         except:
             pass
 
-    # 2. מודל אקטוארי מורחב
+    # 2. מחולל נתונים אקטוארי (Model Generator)
+    # שימוש ב-abs כדי למנוע קריסה
     np.random.seed(abs(hash(ticker_name)) % (2**32))
     
-    # מאזן מורחב
-    assets = equity * np.random.uniform(7.5, 9.5) # מינוף נכסים
+    # מאזן מורחב (Expanded Balance Sheet)
+    assets = equity * np.random.uniform(7.8, 9.2) # מינוף
     liabilities = assets - equity
     
     # נתוני תזרים (P&L Items) לשנה
-    gwp = assets * 0.15 # פרמיות ברוטו
-    reinsurance_rate = np.random.uniform(0.1, 0.2)
+    gwp = assets * 0.16 # פרמיות ברוטו
+    reinsurance_rate = np.random.uniform(0.12, 0.18)
     nwp = gwp * (1 - reinsurance_rate) # פרמיות נטו
     
-    # הנחות יסוד ליחסים (לפני סטרס)
-    base_loss_ratio = np.random.uniform(0.65, 0.72)
-    base_expense_ratio = np.random.uniform(0.23, 0.28)
+    # הנחות יסוד ליחסים (Base Assumptions)
+    base_loss_ratio = np.random.uniform(0.68, 0.74)
+    base_expense_ratio = np.random.uniform(0.22, 0.26)
     
     claims_base = nwp * base_loss_ratio 
     expenses = nwp * base_expense_ratio
     
     # IFRS 17 CSM Breakdown
-    csm = equity * 0.45
+    csm = equity * 0.42
     segments = {
-        "כללי (P&C)": csm * 0.15,
-        "בריאות": csm * 0.30,
-        "חיסכון (Life)": csm * 0.55
+        "ביטוח כללי (P&C)": csm * 0.15,
+        "ביטוח בריאות": csm * 0.30,
+        "חיסכון ופנסיה": csm * 0.55
     }
 
     return {
@@ -149,34 +182,37 @@ def fetch_comprehensive_data(ticker_name):
         "change_pct": change_pct,
         "csm": csm,
         "segments": segments,
-        # נתונים ליחסים פיננסיים
+        # נתונים גולמיים לחישוב
         "gwp": gwp,
         "nwp": nwp,
         "claims_base": claims_base,
         "expenses": expenses,
-        "base_solvency": np.random.uniform(115, 145)
+        "base_solvency": np.random.uniform(118, 142)
     }
 
-def run_advanced_simulation(data, shocks, period_factor):
+def run_simulation_engine(data, shocks, period_factor):
     """
-    מנוע סימולציה שמחשב מחדש את כל הדוחות והיחסים הפיננסיים
+    מנוע הסימולציה המלא - מחשב הכל מחדש לפי הסליידרים
     """
-    # 1. השפעת מניות
+    # 1. זעזוע שוק (מניות)
+    # הנחה: 15% מהנכסים מושקעים במניות
     asset_shock = data['assets'] * 0.15 * (shocks['equity'] / 100.0)
     new_assets = data['assets'] - asset_shock
-    new_equity = data['equity'] - asset_shock
+    new_equity = data['equity'] - asset_shock # יורד מההון
     
-    # 2. השפעת ריבית
-    liab_shock = data['liabilities'] * (shocks['interest'] / 100.0) * -6.0 
+    # 2. זעזוע ריבית (התחייבויות)
+    # Duration approx 6.5 years
+    liab_shock = data['liabilities'] * (shocks['interest'] / 100.0) * -6.5
     new_liabilities = data['liabilities'] + liab_shock
     
+    # עדכון הון סופי (Assets - Liabilities)
     final_equity = new_assets - new_liabilities
     
-    # 3. השפעת ביטולים
+    # 3. זעזוע ביטולים (CSM)
     csm_shock = data['csm'] * (shocks['lapse'] / 100.0)
     new_csm = data['csm'] - csm_shock
     
-    # 4. השפעת קטסטרופה
+    # 4. זעזוע קטסטרופה
     cat_damage = 0
     if shocks['catastrophe']:
         cat_damage = 350000000 # נזק קטסטרופלי קבוע
@@ -184,25 +220,31 @@ def run_advanced_simulation(data, shocks, period_factor):
     new_claims = data['claims_base'] + cat_damage
     
     # 5. חישוב רווח והפסד (P&L) לתקופה
+    # תוצאה חיתומית
     underwriting_result = (data['nwp'] * period_factor) - (new_claims * period_factor) - (data['expenses'] * period_factor)
     
+    # תוצאה השקעתית (כולל הפסד הון)
     base_inv_income = data['assets'] * 0.04 * period_factor
-    inv_income = base_inv_income - (asset_shock * 0.1)
+    inv_income = base_inv_income - (asset_shock * 0.1) 
     
     net_income = underwriting_result + inv_income
     
-    # 6. חישוב יחסים פיננסיים
+    # 6. חישוב יחסים פיננסיים (Ratios)
+    
+    # Solvency II Ratio
     own_funds = final_equity + (new_csm * 0.7)
-    scr_req = (final_equity * 0.9) + max(0, liab_shock * 0.5) 
+    scr_req = (final_equity * 0.9) + max(0, liab_shock * 0.6) 
     solvency = (own_funds / scr_req) * 100
     
+    # Operational Ratios
     earned_premium = data['nwp'] 
     loss_ratio = (new_claims / earned_premium) * 100
     expense_ratio = (data['expenses'] / earned_premium) * 100
     combined_ratio = loss_ratio + expense_ratio
     
+    # Financial Ratios
     leverage_ratio = new_assets / max(1, final_equity)
-    roe = (net_income / max(1, final_equity)) * (1/period_factor) * 100
+    roe = (net_income / max(1, final_equity)) * (1/period_factor) * 100 # גילום שנתי
     retention_ratio = (data['nwp'] / data['gwp']) * 100
 
     return {
@@ -212,6 +254,7 @@ def run_advanced_simulation(data, shocks, period_factor):
         "CSM": new_csm,
         "Solvency": solvency,
         "Net_Income": net_income,
+        # יחסים
         "Loss_Ratio": loss_ratio,
         "Expense_Ratio": expense_ratio,
         "Combined_Ratio": combined_ratio,
@@ -221,10 +264,10 @@ def run_advanced_simulation(data, shocks, period_factor):
     }
 
 # ==========================================
-# 3. חדר בקרה (Sidebar)
+# 3. ממשק שליטה (Sidebar Controls)
 # ==========================================
 with st.sidebar:
-    st.header("🎛️ חדר בקרה")
+    st.header("🎛️ חדר בקרה רגולטורי")
     
     st.markdown("### 📅 דוחות")
     p_type = st.radio("", ["שנתי (Annual)", "רבעוני (Quarterly)"], horizontal=True)
@@ -232,129 +275,153 @@ with st.sidebar:
     
     st.divider()
     
-    st.markdown("### 📉 תרחישי קיצון")
-    s_equity = st.slider("נפילת שוק מניות (%)", 0, 50, 0, format="-%d%%")
-    s_interest = st.slider("שינוי ריבית (%)", -2.0, 2.0, 0.0, step=0.1, format="%+.1f%%")
-    s_lapse = st.slider("שיעור ביטולים (%)", 0, 40, 0, format="-%d%%")
+    st.markdown("### 📉 תרחישי קיצון (Stress Test)")
+    s_equity = st.slider("📉 נפילת שוק מניות (%)", 0, 50, 0, format="-%d%%")
+    s_interest = st.slider("🏦 שינוי עקום ריבית (%)", -2.0, 2.0, 0.0, step=0.1, format="%+.1f%%")
+    s_lapse = st.slider("🏃 שיעור ביטולים (Lapse)", 0, 40, 0, format="-%d%%")
     
-    st.markdown("### 🌪️ אירועים")
-    s_cat = st.checkbox("אירוע קטסטרופה (רעידת אדמה)")
+    st.markdown("### 🌪️ אירועי קטסטרופה")
+    s_cat = st.checkbox("אירוע רעידת אדמה / מלחמה")
     
-    if st.button("🔄 אפס נתונים", type="primary"):
+    if st.button("🔄 אפס סימולציה", type="primary"):
         st.rerun()
     
     shocks = {'equity': s_equity, 'interest': s_interest, 'lapse': s_lapse, 'catastrophe': s_cat}
 
 # ==========================================
-# 4. דשבורד ראשי
+# 4. דשבורד ראשי (Main Dashboard)
 # ==========================================
 
-# Header
+# כותרת ראשית
 c1, c2 = st.columns([3, 1])
 with c1:
-    st.markdown("# 🛡️ ISR-TITAN ULTIMATE")
-    st.markdown("### מערכת תומכת החלטה - ניהול סיכונים ויחסים פיננסיים")
+    st.markdown("# 🛡️ ISR-REGULATOR PRO")
+    st.markdown("### מערכת תומכת החלטה | IFRS 17 & Solvency II")
 with c2:
     is_stress = (s_equity > 0 or s_interest != 0 or s_lapse > 0 or s_cat)
-    bg = "rgba(239, 68, 68, 0.2)" if is_stress else "rgba(16, 185, 129, 0.2)"
-    col = "#f43f5e" if is_stress else "#10b981"
-    txt = "STRESS MODE" if is_stress else "LIVE MODE"
+    bg_col = "rgba(239, 68, 68, 0.2)" if is_stress else "rgba(0, 255, 157, 0.1)"
+    border_col = "#ff4b4b" if is_stress else "#00ff9d"
+    status_txt = "STRESS TEST ACTIVE" if is_stress else "SYSTEM NORMAL"
+    
     st.markdown(f"""
-    <div style="background:{bg}; border:1px solid {col}; padding:10px; border-radius:8px; text-align:center; color:{col}; font-weight:bold;">
-        {txt}<br>{datetime.now().strftime('%H:%M')}
+    <div style="background:{bg_col}; border:1px solid {border_col}; padding:10px; border-radius:8px; text-align:center; color:{border_col}; font-weight:bold;">
+        {status_txt}<br>{datetime.now().strftime('%H:%M')}
     </div>
     """, unsafe_allow_html=True)
 
 st.divider()
 
-# בחירה וחישוב
-comp = st.selectbox("בחר חברה:", list(TICKERS.keys()))
-base_d = fetch_comprehensive_data(comp)
-sim_d = run_advanced_simulation(base_d, shocks, period_factor)
+# בחירת חברה
+comp = st.selectbox("בחר גוף מפוקח:", list(TICKERS.keys()))
+base_d = fetch_full_data(comp)
+sim_d = run_simulation_engine(base_d, shocks, period_factor)
 
-# פונקציה לעיצוב כסף
+# פונקציית עיצוב כסף (Safe Format)
 def fmt_money(val): 
     if val >= 1e9: return f"₪{val/1e9:.2f}B"
     return f"₪{val/1e6:.0f}M"
 
-# --- שורת KPIs ראשית ---
+# --- שורת KPIs ראשית (Top Level) ---
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
     delta = base_d['change_pct']
-    st.markdown(f"""<div class="kpi-card"><div class="kpi-title">הון עצמי (Equity)</div><div class="kpi-val">{fmt_money(sim_d['Equity'])}</div>
-    <div style="font-size:0.8rem; color:#94a3b8;">{'Live API' if base_d['is_live'] else 'Model'} <span style="float:left; color:{'#10b981' if delta>=0 else '#f43f5e'}; direction:ltr;">{delta:+.2f}%</span></div></div>""", unsafe_allow_html=True)
+    change_col = "#00ff9d" if delta >= 0 else "#ff4b4b"
+    st.markdown(f"""
+    <div class="kpi-card">
+        <span class="kpi-title">הון עצמי (Equity)</span>
+        <span class="kpi-value">{fmt_money(sim_d['Equity'])}</span>
+        <div style="margin-top:5px; font-size:0.8rem;">
+            <span style="color:#00d4ff; font-weight:bold;">{'Live API' if base_d['is_live'] else 'Model'}</span>
+            <span style="float:left; color:{change_col}; direction:ltr;">{delta:+.2f}%</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with k2:
     sol = sim_d['Solvency']
-    col = "#10b981" if sol > 110 else ("#f43f5e" if sol < 100 else "#eab308")
-    st.markdown(f"""<div class="kpi-card" style="border-right-color:{col}"><div class="kpi-title">יחס סולבנסי</div><div class="kpi-val" style="color:{col}">{sol:.1f}%</div>
-    <div style="font-size:0.8rem; color:#94a3b8;">יעד: >100%</div></div>""", unsafe_allow_html=True)
+    sol_col = "#00ff9d" if sol > 110 else ("#ff4b4b" if sol < 100 else "#eab308")
+    st.markdown(f"""
+    <div class="kpi-card" style="border-right-color:{sol_col};">
+        <span class="kpi-title">יחס סולבנסי</span>
+        <span class="kpi-value" style="color:{sol_col}">{sol:.1f}%</span>
+        <div style="font-size:0.8rem; color:#9ca3af;">יעד רגולטורי: >100%</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with k3:
-    st.markdown(f"""<div class="kpi-card"><div class="kpi-title">רווח גלום (CSM)</div><div class="kpi-val">{fmt_money(sim_d['CSM'])}</div>
-    <div style="font-size:0.8rem; color:#94a3b8;">מלאי רווחים עתידי</div></div>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kpi-card">
+        <span class="kpi-title">רווח גלום (CSM)</span>
+        <span class="kpi-value">{fmt_money(sim_d['CSM'])}</span>
+        <div style="font-size:0.8rem; color:#9ca3af;">מלאי רווחים עתידי</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with k4:
     roe = sim_d['ROE']
-    col = "#38bdf8" if roe > 0 else "#f43f5e"
-    st.markdown(f"""<div class="kpi-card"><div class="kpi-title">תשואה להון (ROE)</div><div class="kpi-val" style="color:{col}">{roe:.1f}%</div>
-    <div style="font-size:0.8rem; color:#94a3b8;">בגילום שנתי</div></div>""", unsafe_allow_html=True)
+    roe_col = "#00d4ff" if roe > 0 else "#ff4b4b"
+    st.markdown(f"""
+    <div class="kpi-card">
+        <span class="kpi-title">רווח נקי ({p_type.split()[0]})</span>
+        <span class="kpi-value">{fmt_money(sim_d['Net_Income'])}</span>
+        <div style="font-size:0.8rem; color:{roe_col}; font-weight:bold;">ROE: {roe:.1f}%</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- פאנל יחסים פיננסיים (שורת המדדים השנייה) ---
-st.markdown("### 📈 יחסים פיננסיים ותפעוליים (Financial Ratios)")
+# --- פאנל יחסים פיננסיים (Financial Ratios) ---
+st.markdown("### 📈 מדדים תפעוליים ופיננסיים (Ratios)")
 r1, r2, r3, r4, r5 = st.columns(5)
 
-# פונקציית עזר ליחסים (תוקנה למניעת שגיאת תחביר)
-def ratio_box(col, title, value, suffix="%", good_thresh=None, invert=False):
-    color = "var(--text-high)"
+def ratio_display(col, title, value, suffix="%", good_thresh=None, invert=False):
+    color = "#ffffff"
     if good_thresh is not None:
         is_good = value > good_thresh if not invert else value < good_thresh
-        color = "#10b981" if is_good else "#f43f5e"
+        color = "#00ff9d" if is_good else "#ff4b4b"
     
-    html_content = f"""
-    <div class="ratio-card">
+    html = f"""
+    <div class="ratio-box">
         <div class="ratio-lbl">{title}</div>
-        <div class="ratio-val" style="color:{color}">{value:.1f}{suffix}</div>
+        <div class="ratio-val" style="color:{color} !important;">{value:.1f}{suffix}</div>
     </div>
     """
-    col.markdown(html_content, unsafe_allow_html=True)
+    col.markdown(html, unsafe_allow_html=True)
 
-# 1. Combined Ratio
-ratio_box(r1, "Combined Ratio", sim_d['Combined_Ratio'], "%", 100, invert=True)
-# 2. Loss Ratio
-ratio_box(r2, "Loss Ratio (תביעות)", sim_d['Loss_Ratio'], "%", 75, invert=True)
-# 3. Expense Ratio
-ratio_box(r3, "Expense Ratio (הוצאות)", sim_d['Expense_Ratio'], "%", 30, invert=True)
-# 4. Leverage
-ratio_box(r4, "מינוף פיננסי", sim_d['Leverage'], "x", 10, invert=True)
-# 5. Retention
-ratio_box(r5, "שיעור שיור (Retention)", sim_d['Retention'], "%")
+# הצגת היחסים
+ratio_display(r1, "Combined Ratio", sim_d['Combined_Ratio'], "%", 100, invert=True)
+ratio_display(r2, "Loss Ratio", sim_d['Loss_Ratio'], "%", 75, invert=True)
+ratio_display(r3, "Expense Ratio", sim_d['Expense_Ratio'], "%", 30, invert=True)
+ratio_display(r4, "מינוף פיננסי", sim_d['Leverage'], "x", 10, invert=True)
+ratio_display(r5, "Retention Rate", sim_d['Retention'], "%")
 
 st.markdown("---")
 
-# --- גרפים וניתוח ---
-t1, t2 = st.tabs(["🧬 ניתוח ערך (IFRS 17)", "⚖️ מאזן וסיכונים"])
+# --- גרפים וניתוח עומק ---
+t1, t2 = st.tabs(["🧬 ניתוח IFRS 17 וערך", "⚖️ מאזן וסיכונים"])
 
 with t1:
-    c_l, c_r = st.columns([2, 1])
-    with c_l:
-        st.markdown("#### גשר ה-CSM")
+    c_left, c_right = st.columns([2, 1])
+    
+    with c_left:
+        st.markdown("#### גשר ה-CSM (התפתחות הרווח)")
+        # גרף מפל
         fig = go.Figure(go.Waterfall(
             name = "CSM", orientation = "v",
             measure = ["relative", "relative", "relative", "total"],
-            x = ["פתיחה", "צמיחה", "השפעת תרחיש", "סגירה"],
+            x = ["CSM פתיחה", "צמיחה", "השפעת תרחיש", "CSM סגירה"],
             textposition = "outside",
             y = [base_d['csm'], base_d['csm']*0.05, sim_d['CSM'] - (base_d['csm']*1.05), 0],
-            connector = {"line":{"color":"#94a3b8"}},
-            decreasing = {"marker":{"color":"#f43f5e"}}, increasing = {"marker":{"color":"#10b981"}}, totals = {"marker":{"color":"#0ea5e9"}}
+            connector = {"line":{"color":"#9ca3af"}},
+            decreasing = {"marker":{"color":"#ff4b4b"}}, 
+            increasing = {"marker":{"color":"#00ff9d"}}, 
+            totals = {"marker":{"color":"#00d4ff"}}
         ))
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=350, font=dict(family="Heebo"))
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=400, font=dict(family="Heebo"))
         st.plotly_chart(fig, use_container_width=True)
-    
-    with c_r:
+        
+    with c_right:
         st.markdown("#### תרומה ל-CSM לפי מגזר")
-        # גרף שמש (Sunburst)
+        # גרף Sunburst
         sb_labels = []
         sb_parents = []
         sb_values = []
@@ -365,25 +432,23 @@ with t1:
             
         fig_sun = go.Figure(go.Sunburst(
             labels=sb_labels, parents=sb_parents, values=sb_values,
-            branchvalues="total"
+            branchvalues="total", marker=dict(colors=px.colors.sequential.Tealgrn)
         ))
-        fig_sun.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=0, l=0, r=0, b=0))
+        fig_sun.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(t=0, l=0, r=0, b=0))
         st.plotly_chart(fig_sun, use_container_width=True)
 
 with t2:
-    # מאזן ויזואלי
-    st.markdown("#### מבנה מאזן (Simulated Balance Sheet)")
+    st.markdown("#### ניתוח מאזן (Assets vs Liabilities)")
     balance_df = pd.DataFrame({
         "Sect": ["נכסים", "התחייבויות", "הון עצמי"],
         "Value": [sim_d['Assets'], sim_d['Liabilities'], sim_d['Equity']],
-        "Color": ["#0ea5e9", "#f43f5e", "#10b981"]
+        "Color": ["#00d4ff", "#ff4b4b", "#00ff9d"]
     })
     fig_bar = px.bar(balance_df, x="Value", y="Sect", orientation='h', text_auto='.2s', color="Sect", color_discrete_sequence=balance_df["Color"])
-    fig_bar.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=250)
+    fig_bar.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=250, showlegend=False)
     st.plotly_chart(fig_bar, use_container_width=True)
     
-    # טבלת נתונים מלאה
-    st.markdown("#### נתוני דוח מפורטים")
+    st.markdown("#### טבלת נתונים מלאה")
     exp_df = pd.DataFrame([
         {"Item": "Equity", "Value": fmt_money(sim_d['Equity'])},
         {"Item": "Assets", "Value": fmt_money(sim_d['Assets'])},
