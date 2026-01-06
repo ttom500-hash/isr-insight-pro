@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -6,7 +7,7 @@ import random
 from datetime import datetime
 
 # ==========================================
-# 1. הגדרות מערכת ועיצוב (Glassmorphism & RTL)
+# 1. הגדרות מערכת ועיצוב (High Contrast Glassmorphism)
 # ==========================================
 st.set_page_config(page_title="ISR-INSIGHT FINAL", layout="wide", page_icon="🏛️")
 
@@ -15,47 +16,78 @@ def load_css():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700&display=swap');
         
-        /* הגדרות גלובליות - RTL ורקע */
+        /* 1. רקע ראשי כהה ועמוק */
         .stApp {
-            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-            color: white;
+            background: linear-gradient(135deg, #0b1016 0%, #172a3a 50%, #0b1a26 100%);
+            color: #ffffff;
             font-family: 'Heebo', sans-serif;
             direction: rtl;
         }
         
-        /* כרטיסי מידע וסרגל צד שקופים */
+        /* 2. כרטיסי מידע - רקע כהה חצי שקוף לקונטרסט גבוה */
         div[data-testid="metric-container"], section[data-testid="stSidebar"] > div {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(30, 41, 59, 0.7); /* כהה יותר לקריאות */
             backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         }
         
-        /* תיקון כיוון טקסט בכותרות */
-        h1, h2, h3, h4, p, div { text-align: right; }
+        div[data-testid="metric-container"]:hover {
+            border-color: #00ff96;
+            transform: translateY(-2px);
+            transition: all 0.3s ease;
+        }
         
-        /* צבעי טקסט במדדים */
-        div[data-testid="metric-container"] label { color: #e0e0e0 !important; }
-        div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #ffffff !important; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        /* 3. טקסטים וכותרות - לבן בוהק */
+        h1, h2, h3, h4, p, label, .stMarkdown {
+            color: #ffffff !important;
+            text-align: right;
+        }
         
-        /* אנימציית Pulse */
+        /* צבעי תוויות במדדים */
+        div[data-testid="metric-container"] label {
+            color: #94a3b8 !important; /* אפור בהיר לכותרת המשנית */
+            font-weight: 500;
+        }
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+            color: #ffffff !important;
+            font-weight: 700;
+            text-shadow: 0 0 15px rgba(0, 255, 150, 0.2);
+        }
+        
+        /* 4. תיקון צבעים בטבלאות ואינפוטים */
+        .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        /* 5. טאבים וסליידרים */
+        .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+        .stTabs [data-baseweb="tab"] {
+            background-color: rgba(255,255,255,0.05);
+            color: #cbd5e1;
+            border-radius: 6px;
+        }
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            background-color: rgba(0, 255, 150, 0.15);
+            color: #00ff96;
+            border: 1px solid #00ff96;
+        }
+        .stSlider > div > div > div > div { background-color: #00ff96; }
+        
+        /* אנימציית Pulse לאיקון */
         @keyframes pulse-green {
             0% { box-shadow: 0 0 0 0 rgba(0, 255, 150, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(0, 255, 150, 0); }
             100% { box-shadow: 0 0 0 0 rgba(0, 255, 150, 0); }
         }
         .pulse-active {
-            width: 12px; height: 12px; background-color: #00ff96;
+            width: 10px; height: 10px; background-color: #00ff96;
             border-radius: 50%; display: inline-block;
             animation: pulse-green 2s infinite; margin-left: 8px;
         }
-        
-        /* עיצוב סליידרים וטאבים */
-        .stSlider > div > div > div > div { background-color: #00ff96; }
-        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-        .stTabs [data-baseweb="tab"] { background-color: rgba(255,255,255,0.05); border-radius: 8px; color: white; }
-        .stTabs [data-baseweb="tab"][aria-selected="true"] { border: 1px solid #00ff96; color: #00ff96; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -83,36 +115,51 @@ COMPANIES_DB = {
 # 3. מנוע נתונים עמוק (Deep Data Engine)
 # ==========================================
 def generate_company_data(name, c_type):
-    """
-    מייצר את נתוני העומק (IFRS17, Tiers, Segments)
-    משתמש ב-Seed קבוע לפי שם החברה כדי שהנתונים לא ישתנו בכל רענון סתמי.
-    """
     random.seed(hash(name))
     
-    # בסיס הון לפי גודל חברה
+    # בסיס הון
     equity = random.randint(4000, 15000) if c_type == 'public' else random.randint(500, 3000)
+    net_profit = equity * random.uniform(0.08, 0.15)
     
-    # 1. נתוני Solvency II
+    # Solvency II
     own_funds = equity * 1.15
     tier1 = own_funds * random.uniform(0.85, 0.95)
     tier2 = own_funds - tier1
     scr_ratio_base = random.uniform(108, 145)
     
-    # 2. נתוני IFRS 17 (CSM Waterfall)
+    # IFRS 17 - CSM
     csm_start = equity * random.uniform(0.5, 0.8)
     csm_new = csm_start * 0.12
-    csm_release = csm_start * random.uniform(-0.10, -0.06) # שלילי (יורד לרווח)
+    csm_release = csm_start * random.uniform(-0.10, -0.06)
     csm_final = csm_start + csm_new + csm_release
     
-    # 3. נתוני מגזרים (Segmentation)
+    # מגזרים (Segmentation)
     segments = {
-        "ביטוח כללי": {"profit": random.randint(20, 100), "loss_comp": 0},
-        "בריאות": {"profit": random.randint(30, 120), "loss_comp": random.randint(0, 40)}, # סיכוי לחוזה הפסדי
-        "חיסכון ארוך טווח": {"profit": random.randint(50, 300), "loss_comp": 0}
+        "ביטוח כללי (P&C)": {
+            "CSM": equity * random.uniform(0.1, 0.2), 
+            "Profit": random.randint(10, 80), 
+            "Loss_Comp": 0,
+            "Combined_Ratio": random.uniform(90, 105)
+        },
+        "בריאות (Health)": {
+            "CSM": equity * random.uniform(0.2, 0.4), 
+            "Profit": random.randint(30, 120), 
+            "Loss_Comp": random.randint(0, 40) if random.random() > 0.7 else 0,
+            "Combined_Ratio": 0
+        },
+        "חיסכון ארוך טווח (Life)": {
+            "CSM": equity * random.uniform(0.3, 0.6), 
+            "Profit": random.randint(50, 300), 
+            "Loss_Comp": 0,
+            "Combined_Ratio": 0
+        }
     }
     
-    # חישוב סך רכיב הפסד
-    total_loss_comp = sum(s['loss_comp'] for s in segments.values())
+    total_loss_comp = sum(s['Loss_Comp'] for s in segments.values())
+    
+    # יחסים פיננסיים
+    roe = (net_profit / equity) * 100
+    new_biz_margin = (csm_new / (csm_start * 0.2)) * 100
     
     return {
         "הון עצמי": equity,
@@ -126,7 +173,9 @@ def generate_company_data(name, c_type):
         "CSM_Final": csm_final,
         "Release_Rate": abs(csm_release / csm_start) * 100,
         "Loss_Component": total_loss_comp,
-        "Segments": segments
+        "Segments": segments,
+        "ROE": roe,
+        "New_Biz_Margin": new_biz_margin,
     }
 
 @st.cache_data
@@ -144,7 +193,7 @@ def fetch_database():
 df_master = fetch_database()
 
 # ==========================================
-# 4. סרגל צד: סימולטור תרחישי קיצון (Stress Test)
+# 4. סרגל צד: סימולטור
 # ==========================================
 st.sidebar.title("🎮 חדר סימולציה")
 st.sidebar.markdown("### הגדרות תרחיש קיצון")
@@ -152,44 +201,31 @@ st.sidebar.markdown("### הגדרות תרחיש קיצון")
 shock_equity = st.sidebar.slider("📉 נפילת שוק המניות (%)", 0, 50, 0)
 shock_rate = st.sidebar.slider("🏦 תזוזת ריבית (bps)", -100, 100, 0)
 
-# פונקציית הסטרס - מחשבת מחדש את ה-SCR בזמן אמת
 def apply_stress(row):
-    # מניות פוגעות בהון העצמי (Tier 1)
-    equity_damage = row['Tier_1'] * (shock_equity / 100) * 0.6 # רגישות משוערת
-    # ריבית משפיעה על ההתחייבויות (ולכן על דרישת ההון)
+    equity_damage = row['Tier_1'] * (shock_equity / 100) * 0.6
     rate_impact = (shock_rate * -0.12)
-    
-    # חישוב הון חדש
     new_funds = row['Own_Funds'] - equity_damage
-    # שיחזור דרישת ההון המקורית
     scr_req_original = row['Own_Funds'] / (row['SCR_Base'] / 100)
-    
-    # יחס חדש
     new_ratio = (new_funds / scr_req_original) * 100 + rate_impact
     return new_ratio
 
-# הפעלת הסטרס על הדאטה-פריים
 df_master['SCR_Stress'] = df_master.apply(apply_stress, axis=1)
 
 # ==========================================
 # 5. ממשק ראשי (Dashboard)
 # ==========================================
-
-# כותרת ושעון
 c1, c2 = st.columns([3, 1])
 with c1:
     st.title("ISR-INSIGHT FINAL")
-    st.caption("מערכת פיקוח אחודה: IFRS 17 | Solvency II | Stress Testing")
+    st.caption("מערכת פיקוח אחודה: IFRS 17 | Solvency II | Segmentation")
 with c2:
-    time_str = datetime.now().strftime("%H:%M")
     st.markdown(f"""
-        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+        <div style="background: rgba(0, 255, 150, 0.1); padding: 10px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid #00ff96;">
             <div class="pulse-active"></div>
-            <span style="margin-right: 10px; font-weight: bold;">מערכת חיה<br><span style="font-size:0.8em; opacity:0.7">{time_str}</span></span>
+            <span style="margin-right: 10px; font-weight: bold; color: #00ff96;">מערכת חיה</span>
         </div>
     """, unsafe_allow_html=True)
 
-# חיפוש
 search_q = st.text_input("🔍 חיפוש חברה...", "")
 if search_q:
     df_display = df_master[df_master.index.str.contains(search_q)]
@@ -199,7 +235,7 @@ else:
 st.divider()
 
 # לשוניות תוכן
-tabs = st.tabs(["📋 טבלת פיקוח ראשית", "📊 ניתוח CSM (ערך)", "🛡️ איכות הון וסיכון"])
+tabs = st.tabs(["📋 טבלת פיקוח", "📊 ניתוח ערך ומגזרים", "🛡️ איכות הון וסיכון"])
 
 # --- TAB 1: טבלה ראשית ---
 with tabs[0]:
@@ -211,53 +247,78 @@ with tabs[0]:
             "הון עצמי": st.column_config.NumberColumn(format="₪%dM"),
             "CSM_Final": st.column_config.NumberColumn("יתרת CSM", format="₪%dM"),
             "SCR_Stress": st.column_config.ProgressColumn(
-                "יחס סולבנסי (אחרי זעזוע)", 
-                format="%.1f%%", 
-                min_value=0, max_value=200,
+                "יחס סולבנסי (Stress)", format="%.1f%%", min_value=0, max_value=200,
             ),
             "Loss_Component": st.column_config.NumberColumn("רכיב הפסד", format="₪%dM"),
         },
         use_container_width=True,
-        height=600
+        height=500
     )
 
-# --- TAB 2: ניתוח IFRS 17 ---
+# --- TAB 2: ניתוח IFRS 17 ומגזרים ---
 with tabs[1]:
-    col_sel, col_chart = st.columns([1, 3])
+    col_sel, col_content = st.columns([1, 3])
     with col_sel:
         selected_comp = st.selectbox("בחר חברה לניתוח:", df_display.index)
         comp_data = df_display.loc[selected_comp]
         
-        # כרטיסי מידע לחברה
-        st.metric("קצב שחרור רווח", f"{comp_data['Release_Rate']:.1f}%")
-        if comp_data['Release_Rate'] > 10:
-            st.error("⚠️ שחרור אגרסיבי (>10%)")
-        else:
-            st.success("✅ קצב שחרור תקין")
-            
-        st.markdown("#### חלוקה למגזרים")
-        seg_df = pd.DataFrame(comp_data['Segments']).T
-        st.dataframe(seg_df[['profit', 'loss_comp']], use_container_width=True)
+        st.markdown("---")
+        st.info("💡 **ניתוח מגזרי:** זיהוי מקורות הרווח והסיכון לפי פעילות.")
 
-    with col_chart:
-        # גרף מפל (Waterfall)
-        fig = go.Figure(go.Waterfall(
-            name = "CSM", orientation = "v",
-            measure = ["relative", "relative", "relative", "total"],
-            x = ["יתרת פתיחה", "עסקים חדשים", "שחרור לרווח", "יתרת סגירה"],
-            text = [f"{comp_data['CSM_Start']:.0f}", f"+{comp_data['CSM_New']:.0f}", f"{comp_data['CSM_Release']:.0f}", f"{comp_data['CSM_Final']:.0f}"],
-            y = [comp_data['CSM_Start'], comp_data['CSM_New'], comp_data['CSM_Release'], 0],
-            connector = {"line":{"color":"white"}},
-            decreasing = {"marker":{"color":"#ff4b4b"}}, increasing = {"marker":{"color":"#00ff96"}}, totals = {"marker":{"color":"#00b4d8"}}
-        ))
-        fig.update_layout(
-            title=f"גשר ה-CSM: {selected_comp}", 
-            template="plotly_dark", 
-            paper_bgcolor='rgba(0,0,0,0)', 
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family="Heebo", color="white")
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    with col_content:
+        # מדדי KPI עם איקונים והסברים (Tooltip)
+        st.markdown("### 📐 יחסים פיננסיים (KPIs)")
+        k1, k2, k3, k4 = st.columns(4)
+        
+        with k1:
+            st.metric("🛡️ יחס סולבנסי", f"{comp_data['SCR_Base']:.1f}%", help="יחס כושר פירעון ללא זעזועים.")
+        with k2:
+            st.metric("🌱 מרווח עסקים חדשים", f"{comp_data['New_Biz_Margin']:.1f}%", help="רווחיות מכירות חדשות.")
+        with k3:
+            st.metric("⏳ קצב שחרור CSM", f"{comp_data['Release_Rate']:.1f}%", help="קצב הכרה ברווח. >10% = אגרסיבי.")
+        with k4:
+            st.metric("💰 תשואה להון (ROE)", f"{comp_data['ROE']:.1f}%", help="תשואה נקייה על ההון.")
+
+        st.divider()
+        
+        # תצוגה כפולה: מפל CSM + פאי מגזרי
+        c_chart1, c_chart2 = st.columns(2)
+        
+        with c_chart1:
+            st.markdown("#### גשר ה-CSM (התפתחות הערך)")
+            fig_water = go.Figure(go.Waterfall(
+                name = "CSM", orientation = "v",
+                measure = ["relative", "relative", "relative", "total"],
+                x = ["פתיחה", "עסקים חדשים", "שחרור לרווח", "סגירה"],
+                text = [f"{comp_data['CSM_Start']:.0f}", f"+{comp_data['CSM_New']:.0f}", f"{comp_data['CSM_Release']:.0f}", f"{comp_data['CSM_Final']:.0f}"],
+                y = [comp_data['CSM_Start'], comp_data['CSM_New'], comp_data['CSM_Release'], 0],
+                connector = {"line":{"color":"#94a3b8"}},
+                decreasing = {"marker":{"color":"#ff4b4b"}}, increasing = {"marker":{"color":"#00ff96"}}, totals = {"marker":{"color":"#00b4d8"}}
+            ))
+            fig_water.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="white"), height=350)
+            st.plotly_chart(fig_water, use_container_width=True)
+            
+        with c_chart2:
+            st.markdown("#### רווח עתידי (CSM) לפי מגזר")
+            # הכנת דאטה לגרף
+            seg_data_list = [{"Segment": s, "CSM": v['CSM']} for s, v in comp_data['Segments'].items()]
+            df_seg_pie = pd.DataFrame(seg_data_list)
+            
+            fig_seg = px.pie(df_seg_pie, values='CSM', names='Segment', hole=0.4, color_discrete_sequence=px.colors.sequential.Tealgrn)
+            fig_seg.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="white"), height=350)
+            st.plotly_chart(fig_seg, use_container_width=True)
+            
+        # מטריצה מגזרית
+        st.markdown("#### 🧩 מטריצה מגזרית מפורטת")
+        matrix_rows = []
+        for s_name, s_vals in comp_data['Segments'].items():
+            matrix_rows.append({
+                "מגזר": s_name,
+                "CSM (רווח עתידי)": f"₪{s_vals['CSM']:.0f}M",
+                "רכיב הפסד": f"₪{s_vals['Loss_Comp']:.0f}M",
+                "Combined Ratio": f"{s_vals['Combined_Ratio']:.1f}%" if 'Combined_Ratio' in s_vals and s_vals['Combined_Ratio'] > 0 else "-"
+            })
+        st.dataframe(pd.DataFrame(matrix_rows).set_index("מגזר"), use_container_width=True)
 
 # --- TAB 3: איכות הון וסיכון ---
 with tabs[2]:
@@ -265,29 +326,28 @@ with tabs[2]:
     
     with c1:
         st.markdown("### 🏛️ הרכב ההון (Tiering)")
-        if selected_comp in df_display.index: # שימוש בחברה שנבחרה בטאב הקודם
+        if selected_comp in df_display.index:
             labels = ['Tier 1 (הון ליבה)', 'Tier 2 (הון משני)']
             values = [comp_data['Tier_1'], comp_data['Tier_2']]
-            fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4)])
-            fig_pie.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)')
+            fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4, marker=dict(colors=['#00ff96', '#f1c40f']))])
+            fig_pie.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', font=dict(color="white"), height=350)
             st.plotly_chart(fig_pie, use_container_width=True)
         
     with c2:
         st.markdown("### 🚩 דגלים אדומים (EWS)")
         
-        # בדיקת סולבנסי תחת סטרס
         current_scr = comp_data['SCR_Stress']
-        st.metric("יחס סולבנסי (Stress Test)", f"{current_scr:.1f}%", delta=f"{current_scr-100:.1f}% מהמינימום")
+        st.metric("יחס סולבנסי תחת סטרס", f"{current_scr:.1f}%", delta=f"{current_scr-100:.1f}%")
         
         if current_scr < 100:
-            st.error("❌ החברה בגרעון הוני תחת התרחיש הנוכחי!")
+            st.error("❌ **סכנה מיידית:** החברה בגרעון הוני תחת התרחיש הנוכחי!")
         elif current_scr < 110:
-            st.warning("⚠️ החברה קרובה לקו האדום (110%)")
+            st.warning("⚠️ **אזור אזהרה:** החברה קרובה לקו האדום (110%)")
         else:
-            st.success("✅ החברה יציבה")
+            st.success("✅ החברה מציגה איתנות פיננסית יציבה.")
             
         if comp_data['Loss_Component'] > 0:
-            st.error(f"🚩 קיים רכיב הפסד של {comp_data['Loss_Component']:.0f}M ש\"ח")
+            st.error(f"🚩 **חוזים הפסדיים:** קיים רכיב הפסד של {comp_data['Loss_Component']:.0f}M ש\"ח במאזן.")
 
 st.divider()
 st.caption("Developed for Insurance Supervision | Full IFRS 17 & Solvency II Compliance")
