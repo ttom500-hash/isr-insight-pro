@@ -7,7 +7,7 @@ import yfinance as yf
 from datetime import datetime
 
 # ==========================================
-# 1. הגדרות מערכת ועיצוב ELITE (קריאות מקסימלית)
+# 1. הגדרות מערכת ועיצוב ELITE
 # ==========================================
 st.set_page_config(page_title="ISR-TITAN ULTIMATE", layout="wide", page_icon="💎")
 
@@ -52,7 +52,7 @@ def load_css():
         .kpi-title { font-size: 0.8rem; color: var(--text-med); text-transform: uppercase; letter-spacing: 0.5px; }
         .kpi-val { font-size: 1.6rem; font-weight: 800; color: var(--text-high); margin: 5px 0; }
         
-        /* כרטיסי יחסים פיננסיים (שורת המדדים השנייה) */
+        /* כרטיסי יחסים פיננסיים */
         .ratio-card {
             background-color: rgba(30, 41, 59, 0.5);
             border: 1px solid #334155;
@@ -63,8 +63,11 @@ def load_css():
         .ratio-val { font-size: 1.2rem; font-weight: bold; color: var(--accent); }
         .ratio-lbl { font-size: 0.8rem; color: var(--text-med); }
 
-        /* סליידרים וטאבים */
+        /* סליידרים */
         .stSlider > div > div > div > div { background-color: var(--accent); }
+        .stSlider .stMarkdown { color: var(--accent) !important; font-weight: bold; }
+
+        /* טאבים */
         .stTabs [data-baseweb="tab-list"] { gap: 8px; }
         .stTabs [data-baseweb="tab"] { background-color: var(--card-bg); border: 1px solid #334155; color: var(--text-med); border-radius: 6px; }
         .stTabs [data-baseweb="tab"][aria-selected="true"] { background-color: var(--accent); color: #0f172a !important; font-weight: bold; }
@@ -112,17 +115,16 @@ def fetch_comprehensive_data(ticker_name):
         except:
             pass
 
-    # 2. מודל אקטוארי מורחב (Generating P&L Items)
-    # שימוש ב-abs כדי למנוע קריסה
+    # 2. מודל אקטוארי מורחב
     np.random.seed(abs(hash(ticker_name)) % (2**32))
     
     # מאזן מורחב
     assets = equity * np.random.uniform(7.5, 9.5) # מינוף נכסים
     liabilities = assets - equity
     
-    # נתוני תזרים (P&L Items) לשנה - בסיס לחישוב יחסים
-    gwp = assets * 0.15 # פרמיות ברוטו (Gross Written Premium)
-    reinsurance_rate = np.random.uniform(0.1, 0.2) # כמה הולך למבטחי משנה
+    # נתוני תזרים (P&L Items) לשנה
+    gwp = assets * 0.15 # פרמיות ברוטו
+    reinsurance_rate = np.random.uniform(0.1, 0.2)
     nwp = gwp * (1 - reinsurance_rate) # פרמיות נטו
     
     # הנחות יסוד ליחסים (לפני סטרס)
@@ -161,57 +163,48 @@ def run_advanced_simulation(data, shocks, period_factor):
     """
     מנוע סימולציה שמחשב מחדש את כל הדוחות והיחסים הפיננסיים
     """
-    # 1. השפעת מניות (על ההון והנכסים)
-    # הנחה: 15% מהנכסים מושקעים במניות
+    # 1. השפעת מניות
     asset_shock = data['assets'] * 0.15 * (shocks['equity'] / 100.0)
     new_assets = data['assets'] - asset_shock
-    new_equity = data['equity'] - asset_shock # יורד ישר מההון
+    new_equity = data['equity'] - asset_shock
     
-    # 2. השפעת ריבית (על התחייבויות)
-    # Duration approx 6
+    # 2. השפעת ריבית
     liab_shock = data['liabilities'] * (shocks['interest'] / 100.0) * -6.0 
     new_liabilities = data['liabilities'] + liab_shock
     
-    # עדכון הון סופי לשמירת משוואת המאזן
     final_equity = new_assets - new_liabilities
     
-    # 3. השפעת ביטולים (על CSM)
+    # 3. השפעת ביטולים
     csm_shock = data['csm'] * (shocks['lapse'] / 100.0)
     new_csm = data['csm'] - csm_shock
     
-    # 4. השפעת קטסטרופה (על התביעות)
+    # 4. השפעת קטסטרופה
     cat_damage = 0
     if shocks['catastrophe']:
-        cat_damage = 350000000 # נזק קטסטרופלי קבוע
+        cat_damage = 400000000
         
     new_claims = data['claims_base'] + cat_damage
     
-    # 5. חישוב רווח והפסד (P&L) לתקופה
-    # רווח חיתומי = פרמיות נטו - תביעות - הוצאות
+    # 5. חישוב רווח והפסד (P&L)
     underwriting_result = (data['nwp'] * period_factor) - (new_claims * period_factor) - (data['expenses'] * period_factor)
     
-    # רווח השקעות (נפגע בגלל המניות)
-    base_inv_income = data['assets'] * 0.04 * period_factor # תשואה שנתית 4%
-    inv_income = base_inv_income - (asset_shock * 0.1) # הפסד מניות מומש חלקית ב-P&L
+    base_inv_income = data['assets'] * 0.04 * period_factor
+    inv_income = base_inv_income - (asset_shock * 0.1)
     
     net_income = underwriting_result + inv_income
     
-    # 6. חישוב יחסים פיננסיים (Ratios)
-    
-    # Solvency II
+    # 6. חישוב יחסים פיננסיים
     own_funds = final_equity + (new_csm * 0.7)
     scr_req = (final_equity * 0.9) + max(0, liab_shock * 0.5) 
     solvency = (own_funds / scr_req) * 100
     
-    # תפעוליים
     earned_premium = data['nwp'] 
     loss_ratio = (new_claims / earned_premium) * 100
     expense_ratio = (data['expenses'] / earned_premium) * 100
     combined_ratio = loss_ratio + expense_ratio
     
-    # פיננסיים
-    leverage_ratio = new_assets / max(1, final_equity) # מניעת חלוקה ב-0
-    roe = (net_income / max(1, final_equity)) * (1/period_factor) * 100 # שנתי
+    leverage_ratio = new_assets / max(1, final_equity)
+    roe = (net_income / max(1, final_equity)) * (1/period_factor) * 100
     retention_ratio = (data['nwp'] / data['gwp']) * 100
 
     return {
@@ -221,7 +214,6 @@ def run_advanced_simulation(data, shocks, period_factor):
         "CSM": new_csm,
         "Solvency": solvency,
         "Net_Income": net_income,
-        # יחסים חדשים
         "Loss_Ratio": loss_ratio,
         "Expense_Ratio": expense_ratio,
         "Combined_Ratio": combined_ratio,
@@ -282,7 +274,7 @@ comp = st.selectbox("בחר חברה:", list(TICKERS.keys()))
 base_d = fetch_comprehensive_data(comp)
 sim_d = run_advanced_simulation(base_d, shocks, period_factor)
 
-# פונקציה בטוחה לעיצוב כסף
+# פונקציה לעיצוב כסף
 def fmt_money(val): 
     if val >= 1e9: return f"₪{val/1e9:.2f}B"
     return f"₪{val/1e6:.0f}M"
@@ -311,17 +303,62 @@ with k4:
     st.markdown(f"""<div class="kpi-card"><div class="kpi-title">תשואה להון (ROE)</div><div class="kpi-val" style="color:{col}">{roe:.1f}%</div>
     <div style="font-size:0.8rem; color:#94a3b8;">בגילום שנתי</div></div>""", unsafe_allow_html=True)
 
-# --- פאנל יחסים פיננסיים (החלק החסר שהוסף) ---
+# --- פאנל יחסים פיננסיים (תיקון הבאג: הפרדת לוגיקת הצבע מהמחרוזת) ---
 st.markdown("### 📈 יחסים פיננסיים ותפעוליים (Financial Ratios)")
 r1, r2, r3, r4, r5 = st.columns(5)
 
 def ratio_box(col, title, value, suffix="%", good_thresh=None, invert=False):
-    color = "var(--text-high)"
+    # לוגיקת צבע מופרדת
+    text_color = "var(--text-high)"
     if good_thresh is not None:
         is_good = value > good_thresh if not invert else value < good_thresh
-        color = "#10b981" if is_good else "#f43f5e"
+        text_color = "#10b981" if is_good else "#f43f5e"
     
-    col.markdown(f"""
+    # מחרוזת פשוטה
+    box_html = f"""
     <div class="ratio-card">
         <div class="ratio-lbl">{title}</div>
-        <div class="ratio-val"
+        <div class="ratio-val" style="color:{text_color}">{value:.1f}{suffix}</div>
+    </div>
+    """
+    col.markdown(box_html, unsafe_allow_html=True)
+
+# 1. Combined Ratio
+ratio_box(r1, "Combined Ratio", sim_d['Combined_Ratio'], "%", 100, invert=True)
+# 2. Loss Ratio
+ratio_box(r2, "Loss Ratio (תביעות)", sim_d['Loss_Ratio'], "%", 75, invert=True)
+# 3. Expense Ratio
+ratio_box(r3, "Expense Ratio (הוצאות)", sim_d['Expense_Ratio'], "%", 30, invert=True)
+# 4. Leverage
+ratio_box(r4, "מינוף פיננסי", sim_d['Leverage'], "x", 10, invert=True)
+# 5. Retention
+ratio_box(r5, "שיעור שיור (Retention)", sim_d['Retention'], "%")
+
+st.markdown("---")
+
+# --- גרפים וניתוח ---
+t1, t2 = st.tabs(["🧬 ניתוח ערך (IFRS 17)", "⚖️ מאזן וסיכונים"])
+
+with t1:
+    c_l, c_r = st.columns([2, 1])
+    with c_l:
+        st.markdown("#### גשר ה-CSM")
+        fig = go.Figure(go.Waterfall(
+            name = "CSM", orientation = "v",
+            measure = ["relative", "relative", "relative", "total"],
+            x = ["פתיחה", "צמיחה", "השפעת תרחיש", "סגירה"],
+            textposition = "outside",
+            y = [base_d['csm'], base_d['csm']*0.05, sim_d['CSM'] - (base_d['csm']*1.05), 0],
+            connector = {"line":{"color":"#94a3b8"}},
+            decreasing = {"marker":{"color":"#f43f5e"}}, increasing = {"marker":{"color":"#10b981"}}, totals = {"marker":{"color":"#0ea5e9"}}
+        ))
+        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=350, font=dict(family="Heebo"))
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with c_r:
+        st.markdown("#### תרומה ל-CSM לפי מגזר")
+        labels = list(base_d['segments'].keys())
+        values = list(base_d['segments'].values())
+        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5)])
+        fig_pie.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', showlegend=True, legend=dict(orientation="h", y=-0.2), height=350)
+        st.plotly_chart(fig_pie, use_container_width
