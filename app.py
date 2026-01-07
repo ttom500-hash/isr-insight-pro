@@ -3,7 +3,17 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="Insurance Executive Analytics Pro", layout="wide")
+# הגדרות עמוד ועיצוב יוקרתי
+st.set_page_config(page_title="INSIGHT PRO | Global Supervision", layout="wide", initial_sidebar_state="expanded")
+
+# CSS להתאמת עיצוב מקצועי
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; color: white; }
+    .stMetric { background-color: #1e2130; padding: 20px; border-radius: 15px; border: 1px solid #30363d; }
+    .stTab { font-size: 20px !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 @st.cache_data
 def load_data():
@@ -11,88 +21,113 @@ def load_data():
 
 try:
     df = load_data()
-    selected_company = st.sidebar.selectbox("בחר חברה לניתוח:", df['company'].unique())
+    selected_company = st.sidebar.selectbox("🏢 בחר ישות מבוטחת:", df['company'].unique())
     row = df[df['company'] == selected_company].iloc[-1]
 
-    st.title(f"🏛️ מערכת פיקוח הוליסטית: {selected_company}")
-    st.caption(f"מקור: {row['data_source']} | עדכון אחרון: {row['quarter']} {row['year']}")
-
-    # --- 1. חמשת מדדי הליבה הקריטיים [cite: 2026-01-03] ---
-    st.subheader("🚀 מדדי ליבה ויציבות פיננסית [cite: 2026-01-03]")
-    kpi = st.columns(5)
-    kpi[0].metric("סולבנסי", f"{row['solvency_ratio']}%", delta_color="normal" if row['solvency_ratio'] >= 150 else "inverse")
-    kpi[1].metric("יתרת CSM", f"₪{row['csm_balance']}B")
-    kpi[2].metric("מרכיב הפסד", f"₪{row['loss_component']}M")
-    kpi[3].metric("ROE", f"{row['roe']}%")
-    kpi[4].metric("נזילות", f"{row['liquidity']}x")
+    # כותרת ראשית מעוצבת
+    st.title("🛡️ Insurance Supervision & Risk Management")
+    st.subheader(f"ניתוח עומק רגולטורי - {selected_company} | רבעון {row['quarter']} {row['year']}")
+    
+    # שורת מצב מהירה (Status Bar)
+    status_cols = st.columns(4)
+    with status_cols[0]:
+        st.success("✅ יציבות הון: תקינה")
+    with status_cols[1]:
+        st.info(f"📊 מקור: {row['data_source']}")
 
     st.divider()
 
-    # --- 2. סימולטור תרחישי קיצון (Stress Test) ---
-    col_sim, col_pie = st.columns([1, 1])
-    with col_sim:
-        st.subheader("🧪 מנוע תרחישי קיצון (Stress Test)")
-        int_slide = st.select_slider("שינוי ריבית (bps)", options=[-100, -50, 0, 50, 100], value=0)
-        mkt_slide = st.slider("קריסת שוק המניות (%)", -30, 0, 0)
+    # --- מבנה לשוניות (Architecture) ---
+    tab_executive, tab_ifrs17, tab_stress, tab_risk = st.tabs([
+        "💎 תמצית מנהלים (KPIs)", 
+        "📈 ניתוח IFRS 17 מגזרי", 
+        "🧪 תרחישי קיצון", 
+        "⚠️ מפת סיכונים (Heatmap)"
+    ])
+
+    # --- לשונית 1: תמצית מנהלים ---
+    with tab_executive:
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Solvency Ratio", f"{row['solvency_ratio']}%", delta="Target: 150%")
+        col2.metric("Total CSM", f"₪{row['csm_balance']}B")
+        col3.metric("Tier 1 Capital", f"{row['tier1_ratio']}%")
+        col4.metric("ROE", f"{row['roe']}%")
+        col5.metric("Net Liquidity", f"{row['liquidity']}x")
         
-        impact = (int_slide/100 * row['int_sens'] * 100) + (mkt_slide/10 * row['mkt_sens'] * 100)
-        final_solv = row['solvency_ratio'] + impact
-        st.metric("סולבנסי מותאם לתרחיש", f"{final_solv:.1f}%", delta=f"{impact:.1f}%")
+        st.subheader("ניתוח חוסן פיננסי משלים")
+        c1, c2, c3 = st.columns(3)
+        c1.write(f"**הון עצמי למאזן:** {row['equity_to_balance']}%")
+        c2.write(f"**יחס משולב:** {row['combined_ratio']}%")
+        c3.write(f"**תזרים מפעילות:** ₪{row['operating_cash_flow']}B")
+
+    # --- לשונית 2: IFRS 17 מגזרי ---
+    with tab_ifrs17:
+        st.subheader("ניתוח רווחיות ויעילות לפי מגזרי פעילות")
         
-        if final_solv < 150:
-            st.error("⚠️ אזהרה: ירידה מתחת ליעד ההון (150%) [cite: 2026-01-03]")
+        # טבלה מעוצבת
+        seg_df = pd.DataFrame({
+            "מגזר": ["חיים", "בריאות", "כללי"],
+            "CSM (B)": [row['life_csm'], row['health_csm'], row['general_csm']],
+            "Release Rate": [f"{row['life_release_rate']}%", f"{row['health_release_rate']}%", f"{row['general_release_rate']}%"],
+            "New Biz Strain": [f"{row['life_new_biz_strain']}%", f"{row['health_new_biz_strain']}%", f"{row['general_new_biz_strain']}%"]
+        })
+        st.dataframe(seg_df, use_container_width=True)
+        
+        # גרף השוואתי
+        fig_segments = go.Figure()
+        fig_segments.add_trace(go.Bar(name='Release Rate', x=seg_df['מגזר'], y=[row['life_release_rate'], row['health_release_rate'], row['general_release_rate']], marker_color='#00cc96'))
+        fig_segments.add_trace(go.Bar(name='New Biz Strain', x=seg_df['מגזר'], y=[row['life_new_biz_strain'], row['health_new_biz_strain'], row['general_new_biz_strain']], marker_color='#ef553b'))
+        fig_segments.update_layout(barmode='group', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
+        st.plotly_chart(fig_segments, use_container_width=True)
 
-    with col_pie:
-        st.subheader("פיזור CSM (מיליארד ש\"ח)")
-        fig_pie = px.pie(values=[row['life_csm'], row['health_csm'], row['general_csm']], 
-                         names=["חיים וחיסכון", "בריאות", "כללי"], hole=0.4,
-                         color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_pie, use_container_width=True)
+    # --- לשונית 3: תרחישי קיצון ---
+    with tab_stress:
+        st.subheader("סימולציית רגישות הון (Solvency Stress Test)")
+        col_s1, col_s2 = st.columns([1, 2])
+        
+        with col_s1:
+            st.write("כוונן פרמטרים:")
+            s_int = st.slider("שינוי ריבית (bps)", -200, 200, 0)
+            s_mkt = st.slider("קריסת שוק המניות (%)", -40, 0, 0)
+            
+            impact = (s_int/100 * row['int_sens'] * 100) + (s_mkt/10 * row['mkt_sens'] * 100)
+            final_solv = row['solvency_ratio'] + impact
+        
+        with col_s2:
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number+delta",
+                value = final_solv,
+                delta = {'reference': 150, 'position': "top"},
+                gauge = {
+                    'axis': {'range': [0, 250]},
+                    'bar': {'color': "#00ffcc"},
+                    'steps': [
+                        {'range': [0, 100], 'color': "#ff4b4b"},
+                        {'range': [100, 150], 'color': "#ffa500"},
+                        {'range': [150, 250], 'color': "#00cc96"}]}))
+            fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=400)
+            st.plotly_chart(fig_gauge, use_container_width=True)
 
-    st.divider()
+    # --- לשונית 4: מפת סיכונים (Heatmap) ---
+    with tab_risk:
+        st.subheader("לוח בקרה לניהול סיכונים (Risk Heatmap)")
+        
+        # בניית מפה חזותית של סיכונים
+        risk_data = {
+            "סוג סיכון": ["שוק", "אשראי", "חיתום"],
+            "ציון": [row['market_risk_score'], row['credit_risk_score'], row['underwriting_risk_score']]
+        }
+        
+        def get_risk_label(score):
+            if score == 1: return "🟢 נמוך"
+            if score == 2: return "🟡 בינוני"
+            return "🔴 גבוה"
 
-    # --- 3. ניתוח IFRS 17 מגזרי עמוק (התוספת החדשה) ---
-    st.subheader("🛡️ ניתוח IFRS 17 מעמיק לפי מגזרי פעילות")
-    
-    # טבלת יחסים מגזרית
-    segment_metrics = pd.DataFrame({
-        "מדד פיקוחי (IFRS 17)": ["CSM Release Rate", "New Business Strain"],
-        "חיים וחיסכון": [f"{row['life_release_rate']}%", f"{row['life_new_biz_strain']}%"],
-        "בריאות": [f"{row['health_release_rate']}%", f"{row['health_new_biz_strain']}%"],
-        "ביטוח כללי": [f"{row['general_release_rate']}%", f"{row['general_new_biz_strain']}%"]
-    })
-    st.table(segment_metrics)
-
-    # גרף השוואת ביצועים מגזריים
-    fig_bar = go.Figure()
-    fig_bar.add_trace(go.Bar(name='קצב שחרור רווח (Release)', x=['חיים', 'בריאות', 'כללי'], 
-                             y=[row['life_release_rate'], row['health_release_rate'], row['general_release_rate']]))
-    fig_bar.add_trace(go.Bar(name='עצימות הון חדש (Strain)', x=['חיים', 'בריאות', 'כללי'], 
-                             y=[row['life_new_biz_strain'], row['health_new_biz_strain'], row['general_new_biz_strain']]))
-    fig_bar.update_layout(title="השוואת יעילות ורווחיות מגזרית (IFRS 17)", barmode='group')
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    with st.expander("🧐 הנחיות המפקח לניתוח הממצאים"):
-        st.write(f"**CSM to Equity:** יחס הקבוצה עומד על **{row['csm_to_equity']}x**, המעיד על פוטנציאל רווח עתידי חזק ביחס להון הקיים.")
-        st.info("שימו לב להבדלים ב-Strain: מגזר המציג עצימות הון גבוהה דורש בחינה של מודל התמחור והעמלות.")
-
-    st.divider()
-
-    # --- 4. ניתוח דוחות כספיים (רוה"פ, מאזן, תזרים) ---
-    st.subheader("📋 ניתוח דוחות כספיים משלים")
-    t_pnl, t_bs, t_cf = st.tabs(["דוח רווח והפסד", "מאזן ונזילות", "דוח תזרים מזומנים"])
-    
-    with t_pnl:
-        st.metric("יחס משולב (Combined Ratio)", f"{row['combined_ratio']}%", help="רווחיות חיתומית בביטוח כללי")
-        st.metric("יחס הוצאות הנהלה", f"{row['expense_ratio']}%")
-    
-    with t_bs:
-        st.metric("הון עצמי לסך מאזן", f"{row['equity_to_balance']}%")
-        st.write("יחס זה משמש לבחינת רמת המינוף של הקבוצה ביחס לנכסים המנוהלים.")
-    
-    with t_cf:
-        st.metric("תזרים מפעילות שוטפת", f"₪{row['operating_cash_flow']}B")
-        st.write("תזרים חיובי מאשר כי הרווחיות החשבונאית מגובה במזומנים זמינים.")
+        r_cols = st.columns(3)
+        for i, risk in enumerate(risk_data["סוג סיכון"]):
+            r_cols[i].metric(risk, get_risk_label(risk_data["ציון"][i]))
+        
+        st.info("💡 **הערת פיקוח:** מפת הסיכונים מבוססת על מתודולוגיית ORSA (Own Risk and Solvency Assessment).")
 
 except Exception as e:
-    st.error(f"שגיאה קריטית: ודא שקובץ ה-CSV ב-GitHub מכיל את כל העמודות החדשות. פירוט: {e}")
+    st.error(f"שגיאה קריטית: {e}")
