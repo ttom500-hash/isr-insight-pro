@@ -4,152 +4,146 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pdfplumber
 import os
+from datetime import date
 
-# --- 1. הגדרות מותג Apex ---
-st.set_page_config(page_title="Apex - SupTech Intelligence", page_icon="🛡️", layout="wide")
+# --- 1. Apex Professional Config & Branding ---
+st.set_page_config(page_title="Apex - SupTech Master Intelligence", page_icon="🛡️", layout="wide")
 
+# פונקציית שעון החול המקורית
+def get_countdown():
+    target = date(2026, 3, 31)
+    days_left = (target - date.today()).days
+    return max(0, days_left)
+
+# טעינת נתונים עם ניקוי ותיקוף עמודות
 @st.cache_data
 def load_data():
     path = 'data/database.csv'
-    if os.path.exists(path):
-        df = pd.read_csv(path)
-        # המרת נתונים בטוחה
-        cols = ['solvency_ratio', 'csm_total', 'roe', 'combined_ratio', 'new_biz_margin', 
-                'own_funds', 'scr_amount', 'mkt_risk', 'und_risk', 'operational_risk',
-                'life_csm', 'health_csm', 'general_csm', 'vfa_csm_pct', 'paa_pct', 'mkt_sens']
-        for col in cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        return df
-    return pd.DataFrame()
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    # תיקון שמות עמודות (מניעת KeyErrors)
+    df.columns = df.columns.str.strip()
+    # המרת נתונים למספרים
+    numeric_cols = df.columns.drop(['company', 'quarter'])
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    return df
 
-# פונקציית עזר להצגת מדד עם הסבר מפורט (Popover)
-def metric_with_explanation(label, value, title, description, formula=None):
+# פונקציה להצגת מדד עם הסבר נוסחתי (LaTeX)
+def render_metric(label, value, title, desc, formula=None):
     st.metric(label, value)
     with st.popover(f"ℹ️ {label}"):
         st.subheader(title)
-        st.write(description)
+        st.write(desc)
         if formula:
-            st.write("**הנוסחה הפיקוחיות:**")
+            st.write("**הנוסחה המקצועית:**")
             st.latex(formula)
 
-# --- 2. סרגל צד (Sidebar) לניהול וחיפוש ---
+# --- 2. Sidebar: שעון חול, ניווט ופורטל ---
 df = load_data()
 
 with st.sidebar:
     st.title("🛡️ Apex SupTech")
-    st.caption("מערכת ניתוח הוליסטית | IFRS 17 & Solvency II")
+    st.caption("גרסת הליבה 2026 | IFRS 17 & Solvency II")
     st.divider()
     
-    # פורטל טעינת קבצים משולחן העבודה
-    with st.expander("📂 פורטל טעינה (מקומי)"):
-        st.write("טעינת נתונים מתוך קבצי PDF")
-        pdf_file = st.file_uploader("גרור דוח לכאן", type=['pdf'])
-        if pdf_file:
-            st.success("הקובץ נטען לעיבוד")
-
+    # הצגת "שעון החול" המקורי
+    days = get_countdown()
+    st.subheader("⏳ שעון חול לדיווח")
+    st.metric("ימים לפרסום דוחות 2025", f"{days}")
+    if days < 60:
+        st.warning("שים לב: תקופת ביקורת הדוחות החלה")
+    
     st.divider()
-    if not df.empty:
-        st.header("🔍 מנוע חיפוש")
-        sel_comp = st.selectbox("1. בחר חברה:", sorted(df['company'].unique()))
-        df_comp = df[df['company'] == sel_comp].sort_values(by=['year', 'quarter'])
-        sel_year = st.selectbox("2. בחר שנה:", sorted(df_comp['year'].unique(), reverse=True))
-        sel_q = st.selectbox("3. בחר רבעון:", sorted(df_comp[df_comp['year']==sel_year]['quarter'].unique(), reverse=True))
-        
-        # נתוני הרבעון הנבחר
-        d = df_comp[(df_comp['year'] == sel_year) & (df_comp['quarter'] == sel_q)].iloc[0]
 
-# --- 3. התצוגה המרכזית (Apex Professional Dashboard) ---
+    # פורטל טעינה משולחן העבודה (בתוך Expander לשמירה על ניקיון)
+    with st.expander("📂 פורטל טעינה (Local)"):
+        st.write("גרור PDF מחלונית הדיווחים בשולחן העבודה")
+        uploaded_pdf = st.file_uploader("טעינה לעיבוד", type=['pdf'])
+        if uploaded_pdf:
+            st.success("הקובץ מוכן לסריקה אופטית.")
+
+    if not df.empty:
+        st.divider()
+        st.header("🔍 ניווט במערכת")
+        sel_comp = st.selectbox("בחר חברה:", sorted(df['company'].unique()))
+        df_comp = df[df['company'] == sel_comp].sort_values(by=['year', 'quarter'], ascending=False)
+        sel_q = st.selectbox("בחר רבעון:", df_comp['quarter'].unique())
+        
+        # שליפת נתוני התקופה
+        d = df_comp[df_comp['quarter'] == sel_q].iloc[0]
+
+# --- 3. Main Dashboard: Apex Original Depth ---
 if not df.empty:
     st.title(f"דוח פיקוחי מאוחד: {sel_comp}")
-    st.info(f"תקופת דיווח: {sel_q} {sel_year} | נתונים מאומתים")
+    st.info(f"תקופה: {sel_q} {int(d['year'])} | סטטוס: Verified Data Access")
 
-    # שורת 5 ה-KPIs הקריטיים עם הסברים מפורטים
+    # שחזור 5 ה-KPIs המקוריים
     st.divider()
-    c1, c2, c3, c4, c5 = st.columns(5)
+    m1, m2, m3, m4, m5 = st.columns(5)
     
-    with c1:
-        metric_with_explanation("סולבנסי", f"{d['solvency_ratio']}%", 
-                               "יחס כושר פירעון (Solvency Ratio)", 
-                               "מודד את היחס בין ההון המוכר של החברה לבין דרישת ההון המינימלית (SCR).",
-                               r"Ratio = \frac{Own \ Funds}{SCR}")
-    with c2:
-        metric_with_explanation("יתרת CSM", f"₪{d['csm_total']}B", 
-                               "מרווח שירות חוזי (IFRS 17)", 
-                               "מייצג את הרווח הלא ממומש מחוזי ביטוח שטרם הוכר ברווח והפסד.",
-                               r"CSM = PV(Future \ Profits) - RA")
-    with c3:
-        metric_with_explanation("ROE", f"{d['roe']}%", 
-                               "תשואה להון (Return on Equity)", 
-                               "מודד את יעילות החברה ביצירת רווחים מההון העצמי שלה.",
-                               r"ROE = \frac{Net \ Income}{Avg. \ Equity}")
-    with c4:
-        metric_with_explanation("יחס משולב", f"{d['combined_ratio']}%", 
-                               "Combined Ratio (ביטוח כללי)", 
-                               "מדד ליעילות חיתומית: סך התביעות וההוצאות חלקי הפרמיות.",
-                               r"CR = \frac{Losses + Expenses}{Premiums}")
-    with c5:
-        metric_with_explanation("מרווח עסק חדש", f"{d['new_biz_margin']}%", 
-                               "New Business Margin", 
-                               "היחס בין ה-CSM שנוצר מעסקים חדשים לבין ערך הפרמיות המהוון.",
-                               r"Margin = \frac{CSM_{new}}{PV \ Premiums}")
+    with m1:
+        render_metric("סולבנסי", f"{int(d['solvency_ratio'])}%", "יחס כושר פירעון", 
+                      "היחס בין ההון המוכר לדרישת ההון המינימלית.", r"Ratio = \frac{Own \ Funds}{SCR}")
+    with m2:
+        render_metric("יתרת CSM", f"₪{d['csm_total']}B", "Contractual Service Margin", 
+                      "רווח עתידי מחוזי ביטוח קיימים (IFRS 17).", r"CSM = PV(Flows) - RA")
+    with m3:
+        render_metric("ROE", f"{d['roe']}%", "Return on Equity", 
+                      "תשואה להון המשקפת את יעילות יצירת הרווח עבור בעלי המניות.", r"ROE = \frac{Net \ Income}{Equity}")
+    with m4:
+        render_metric("יחס משולב", f"{d['combined_ratio']}%", "Combined Ratio", 
+                      "מדד ליעילות חיתומית (ביטוח כללי).", r"CR = \frac{Claims + Expenses}{Premiums}")
+    with m5:
+        render_metric("מרווח עסק חדש", f"{d['new_biz_margin']}%", "New Business Margin", 
+                      "רווחיות המכירות החדשות שבוצעו ברבעון הדיווח.", r"Margin = \frac{CSM_{new}}{PV \ Premium}")
 
-    # טאבים מקצועיים
-    tabs = st.tabs(["🏛️ חוסן הוני (Solvency II)", "📑 ניתוח רווחיות (IFRS 17)", "⛈️ תרחישי קיצון (Stress Test)"])
+    # טאבים מקצועיים ששוחזרו במלואם
+    t1, t2, t3, t4 = st.tabs(["🏛️ חוסן הוני", "📑 רווחיות (IFRS 17)", "⛈️ Stress Test", "📈 מגמות"])
 
-    # טאב 1: סולבנסי
-    with tabs[0]:
-        st.subheader("ניתוח כושר פירעון ועודפי הון")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            fig_sol = go.Figure(data=[
+    with t1:
+        st.subheader("ניתוח דרישות הון (Solvency II)")
+        
+        ca, cb = st.columns(2)
+        with ca:
+            fig_bar = go.Figure(data=[
                 go.Bar(name='הון מוכר', x=[sel_comp], y=[d['own_funds']], marker_color='#1B4F72'),
                 go.Bar(name='דרישת SCR', x=[sel_comp], y=[d['scr_amount']], marker_color='#943126')
             ])
-            fig_sol.update_layout(title="הון מוכר מול דרישת SCR (₪ מיליארד)", barmode='group')
-            st.plotly_chart(fig_sol, use_container_width=True)
-        with col_b:
-            risk_data = pd.DataFrame({'קטגוריה': ['שוק', 'חיתום', 'תפעולי'], 'סכום': [d['mkt_risk'], d['und_risk'], d['operational_risk']]})
-            st.plotly_chart(px.pie(risk_data, names='קטגוריה', values='סכום', title="פילוח דרישת הון לפי סיכונים", hole=0.4), use_container_width=True)
+            fig_bar.update_layout(title="הון מול דרישה (₪ מיליארד)", barmode='group')
+            st.plotly_chart(fig_bar, use_container_width=True)
+        with cb:
+            risk_df = pd.DataFrame({'קטגוריה': ['שוק', 'חיתום', 'תפעולי'], 'סכום': [d['mkt_risk'], d['und_risk'], d['operational_risk']]})
+            st.plotly_chart(px.pie(risk_data=risk_df, names='קטגוריה', values='סכום', title="פילוח רכיבי סיכון", hole=0.4), use_container_width=True)
 
-    # טאב 2: IFRS 17
-    with tabs[1]:
-        st.subheader("ניתוח מגזרי ושיטות מדידה")
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            sector_df = pd.DataFrame({'מגזר': ['חיים', 'בריאות', 'כללי'], 'CSM': [d['life_csm'], d['health_csm'], d['general_csm']]})
-            st.plotly_chart(px.bar(sector_df, x='מגזר', y='CSM', title="יתרת CSM לפי מגזרי פעילות", color='מגזר'), use_container_width=True)
-        with col_c2:
-            model_df = pd.DataFrame({'מודל': ['VFA', 'PAA', 'GMM'], 'אחוז': [d['vfa_csm_pct'], d['paa_pct'], 100-(d['vfa_csm_pct']+d['paa_pct'])]})
-            st.plotly_chart(px.pie(model_df, names='מודל', values='אחוז', title="תמהיל מודלים למדידת חוזים", hole=0.5), use_container_width=True)
+    with t2:
+        st.subheader("ניתוח IFRS 17 ומגזרי פעילות")
+        
+        cc, cd = st.columns(2)
+        with cc:
+            sec_df = pd.DataFrame({'מגזר': ['חיים', 'בריאות', 'כללי'], 'CSM': [d['life_csm'], d['health_csm'], d['general_csm']]})
+            st.plotly_chart(px.bar(sec_df, x='מגזר', y='CSM', title="פיזור CSM לפי מגזר", color='מגזר'), use_container_width=True)
+        with cd:
+            mod_df = pd.DataFrame({'מודל': ['VFA', 'PAA', 'GMM'], 'אחוז': [d['vfa_csm_pct'], d['paa_pct'], 100-(d['vfa_csm_pct']+d['paa_pct'])]})
+            st.plotly_chart(px.pie(mod_df, names='מודל', values='אחוז', title="תמהיל מודלים למדידה", hole=0.5), use_container_width=True)
 
-    # טאב 3: Stress Test המקורי
-    with tabs[2]:
-        st.subheader("סימולציית רגישות לזעזועים בשוק ההון")
-        st.write("הזז את הסרגל כדי לבחון את השפעת ירידת שוק המניות על יחס הסולבנסי:")
-        shock = st.slider("זעזוע מניות (ירידה ב-%)", 0, 40, 0)
+    with t3:
+        st.subheader("⛈️ Stress Test: רגישות שוק המניות")
+        st.write("בחינת השפעת ירידת שוק המניות על יחס הסולבנסי:")
+        shock = st.slider("עוצמת ירידה בשוק (%)", 0, 40, 0)
+        proj_sol = max(0, d['solvency_ratio'] - (shock * d['mkt_sens']))
         
-        # לוגיקת רגישות
-        impact = shock * d['mkt_sens']
-        projected_solvency = max(0, d['solvency_ratio'] - impact)
-        
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=projected_solvency,
-            title={'text': "יחס סולבנסי חזוי"},
-            gauge={
-                'axis': {'range': [0, 250]},
-                'steps': [
-                    {'range': [0, 100], 'color': "#FADBD8"},
-                    {'range': [100, 150], 'color': "#FCF3CF"},
-                    {'range': [150, 250], 'color': "#D4EFDF"}
-                ],
-                'threshold': {'line': {'color': "red", 'width': 4}, 'value': 100}
-            }
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-        
-        if projected_solvency < 100:
-            st.error("⚠️ אזהרה: בתרחיש זה החברה יורדת מתחת לדרישת ההון המינימלית!")
+        fig_g = go.Figure(go.Indicator(
+            mode="gauge+number", value=proj_sol, title={'text': "סולבנסי חזוי"},
+            gauge={'axis': {'range': [0, 250]}, 
+                   'steps': [{'range': [0, 100], 'color': "#FADBD8"}, {'range': [150, 250], 'color': "#D4EFDF"}],
+                   'threshold': {'line': {'color': "red", 'width': 4}, 'value': 100}}))
+        st.plotly_chart(fig_g, use_container_width=True)
+
+    with t4:
+        st.subheader("ניתוח מגמות היסטורי (2025)")
+        st.plotly_chart(px.line(df_comp, x='quarter', y=['solvency_ratio', 'roe'], markers=True, title="התפתחות סולבנסי ו-ROE"), use_container_width=True)
+
 else:
-    st.error("לא נמצא קובץ נתונים. וודא שקיים קובץ database.csv תקין.")
+    st.error("מחסן הנתונים לא נמצא. וודא שקיים קובץ data/database.csv ב-GitHub.")
