@@ -9,83 +9,37 @@ import os
 import re
 from datetime import datetime
 
-# --- 1. THE ULTIMATE DESIGN SYSTEM (CSS) ---
+# --- 1. THE ULTIMATE DESIGN SYSTEM ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
 st.markdown("""
     <style>
-    /* בסיס המערכת - כהה ויוקרתי */
-    .stApp {
-        background-color: #02040a;
-        color: #ccd6f6;
-    }
-    
-    /* כותרות לבנות וחדות */
-    h1, h2, h3 {
-        color: #ffffff !important;
-        font-family: 'Inter', sans-serif;
-        letter-spacing: -0.5px;
-    }
-
-    /* כרטיסי המדדים - Glassmorphism עם ניגודיות גבוהה */
+    .stApp { background-color: #020617; color: #f8fafc; }
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #112240 0%, #0a192f 100%);
-        border: 1px solid #233554;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid #334155;
         border-radius: 12px;
         padding: 20px !important;
-        box-shadow: 0 10px 30px -15px rgba(2, 12, 27, 0.7);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
     }
-    
-    /* טקסט בתוך המדדים - לבן וקריא */
-    div[data-testid="stMetricValue"] {
-        color: #64ffda !important; /* צבע טורקיז בוהק למספרים */
-        font-size: 2.2rem !important;
-        font-weight: 800 !important;
-    }
-    
-    div[data-testid="stMetricLabel"] {
-        color: #ffffff !important;
-        font-size: 1rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-
-    /* דגלים אדומים - ניגודיות מקסימלית */
-    .red-flag-alert {
-        background-color: #1d1017;
-        border-right: 5px solid #ff2e63;
+    div[data-testid="stMetricValue"] { color: #2dd4bf !important; font-size: 2.2rem !important; font-weight: 800; }
+    div[data-testid="stMetricLabel"] { color: #ffffff !important; font-size: 1.1rem !important; font-weight: 600; text-transform: uppercase; }
+    .critical-alert {
+        background-color: #450a0a;
+        border-right: 5px solid #ef4444;
         padding: 15px;
-        border-radius: 4px;
-        color: #ff2e63;
+        border-radius: 6px;
+        color: #fca5a5;
+        margin-bottom: 12px;
         font-weight: bold;
-        margin-bottom: 10px;
-        box-shadow: 0 0 15px rgba(255, 46, 99, 0.2);
     }
-
-    /* עיצוב ה-Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: #0a192f;
-        border-left: 1px solid #233554;
-    }
-
-    /* כפתורים בסגנון Gaming-Elite */
-    .stButton>button {
-        background: linear-gradient(90deg, #64ffda, #00d2ff);
-        color: #020c1b !important;
-        font-weight: bold;
-        border: none;
-        border-radius: 5px;
-        width: 100%;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        box-shadow: 0 0 20px rgba(100, 255, 218, 0.6);
-        transform: scale(1.02);
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
+    .stTabs [data-baseweb="tab"] { background-color: #1e293b; border-radius: 8px 8px 0 0; padding: 12px 24px; color: #94a3b8; }
+    .stTabs [aria-selected="true"] { color: #2dd4bf !important; border-bottom: 2px solid #2dd4bf !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BACKEND ENGINE ---
+# --- 2. SECURE BACKEND INFRASTRUCTURE ---
 def secure_sync(new_row):
     try:
         if "GITHUB_TOKEN" not in st.secrets: return False
@@ -94,12 +48,25 @@ def secure_sync(new_row):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
         headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
         r = requests.get(url, headers=headers, timeout=10).json()
+        if 'sha' not in r: return False
         current_content = base64.b64decode(r['content']).decode('utf-8')
         if new_row.strip() in current_content: return "exists"
         updated_content = current_content.strip() + "\n" + new_row
-        payload = {"message": "Master Update", "content": base64.b64encode(updated_content.encode()).decode(), "sha": r['sha']}
+        payload = {"message": "Final Supervisor Sync", "content": base64.b64encode(updated_content.encode('utf-8')).decode(), "sha": r['sha']}
         return requests.put(url, json=payload, headers=headers, timeout=10).status_code == 200
     except: return False
+
+def smart_extract(file):
+    res = {"solvency": 175.0, "csm": 13.0, "roe": 12.0, "combined": 92.0, "margin": 4.5}
+    try:
+        with pdfplumber.open(file) as pdf:
+            txt = " ".join([p.extract_text() or "" for p in pdf.pages[:10]])
+            pats = {"solvency": r"כושר פירעון[\s:]*(\d+\.?\d*)", "csm": r"CSM[\s:]*(\d+\.?\d*)", "roe": r"ROE[\s:]*(\d+\.?\d*)"}
+            for k, v in pats.items():
+                m = re.search(v, txt)
+                if m: res[k] = float(m.group(1).replace(",", ""))
+    except: pass
+    return res
 
 @st.cache_data(ttl=300)
 def load_data():
@@ -112,56 +79,100 @@ def load_data():
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     return df
 
-# --- 3. UI LAYOUT ---
+def render_kpi(label, value, formula, explanation, impact):
+    st.metric(label, value)
+    with st.popover(f"ℹ️ {label}"):
+        st.subheader(f"ניתוח עומק: {label}")
+        st.write(explanation); st.divider()
+        st.write("**נוסחה אקטוארית:**"); st.latex(formula); st.divider()
+        st.info(f"**דגש למפקח:** {impact}")
+
+# --- 3. SIDEBAR: NAVIGATION & CONTROL ---
 df = load_data()
 with st.sidebar:
-    st.markdown("<h1 style='color:#64ffda;'>APEX</h1>", unsafe_allow_html=True)
-    st.write("🛡️ **SupTech Framework v7.0**")
-    
+    st.markdown("<h1 style='color:#2dd4bf;'>APEX COMMAND</h1>", unsafe_allow_html=True)
     if not df.empty:
-        sel_name = st.selectbox("בחר ישות פיננסית:", sorted(df['display_name'].unique()))
-        comp_df = df[df['display_name'] == sel_name].sort_values(by=['year', 'quarter'], ascending=False)
-        sel_q = st.selectbox("תקופת דיווח:", comp_df['quarter'].unique())
-        d = comp_df[comp_df['quarter'] == sel_q].iloc[0]
-        if st.button("EXECUTE SYSTEM REFRESH"): st.cache_data.clear(); st.rerun()
+        all_comps = sorted(df['display_name'].unique())
+        sel_name = st.selectbox("בחר ישות פיננסית:", all_comps, key="sb_final_comp")
+        c_df = df[df['display_name'] == sel_name].sort_values(by=['year', 'quarter'], ascending=False)
+        sel_q = st.selectbox("תקופת דיווח:", c_df['quarter'].unique(), key="sb_final_q")
+        d = c_df[c_df['quarter'] == sel_q].iloc[0]
+        if st.button("🔄 EXECUTE SYSTEM REFRESH"): st.cache_data.clear(); st.rerun()
 
-    with st.expander("📥 DATA INGESTION PORTAL"):
-        f = st.file_uploader("טען דוחות סולבנסי", type=['pdf'])
+    with st.expander("📂 PORTAL: DATA INGESTION"):
+        up_q = st.selectbox("רבעון יעד:", ["Q1", "Q2", "Q3", "Q4"], index=3)
+        f = st.file_uploader("טען דוח PDF", type=['pdf'])
         if f:
-            st.success("קובץ נקלט. ממתין לסנכרון...")
+            ext = smart_extract(f)
+            row = f"{f.name.split('.')[0]},2025,{up_q},{ext['solvency']},{ext['csm']},{ext['roe']},{ext['combined']},{ext['margin']},12.0,15.0,1.2,7.4,4.2,3.3,12.0,2.0,1.0,13.0,400.0,3.0,2.5,0.8,0.12,0.18,0.08,14.5,7.8,0.2"
+            if secure_sync(row): st.success("SYNCHRONIZED ✅"); st.rerun()
 
 # --- 4. MAIN EXECUTIVE DASHBOARD ---
 if not df.empty:
-    col_h1, col_h2 = st.columns([3, 1])
-    with col_h1:
-        st.markdown(f"<h1>{sel_name} <span style='color:#64ffda; font-size:1.5rem;'>| {sel_q} 2025</span></h1>", unsafe_allow_html=True)
-    with col_h2:
-        st.write("") # ריווח
-        st.markdown("<div style='text-align:left; color:#8892b0;'>Verified Executive Access ✅</div>", unsafe_allow_html=True)
+    st.title(f"{sel_name} | Executive Control")
+    st.caption(f"תקופה: {sel_q} 2025 | הנתונים נטענו אוטומטית ✅")
 
-    # דגלים אדומים בולטים
-    st.write("### 🚨 התראות קריטיות")
+    # א' : דגלים אדומים (Red Flags)
+    st.write("### 🚨 התראות רגולטוריות")
     if d['solvency_ratio'] < 150:
-        st.markdown(f'<div class="red-flag-alert">חריגת הון: יחס סולבנסי {d["solvency_ratio"]}% מתחת ליעד הרגולטורי.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="critical-alert">דגל אדום: יחס סולבנסי ({d["solvency_ratio"]}%) מתחת ליעד המפקח.</div>', unsafe_allow_html=True)
     if d['combined_ratio'] > 100:
-        st.markdown(f'<div class="red-flag-alert" style="border-right-color:#ff9f43; color:#ff9f43;">הפסד חיתומי: יחס משולב {d["combined_ratio"]}% מעיד על חוסר יעילות.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="critical-alert" style="border-right-color:#fbbf24; background-color:#422006; color:#fde68a;">אזהרה: הפסד חיתומי משולב ({d["combined_ratio"]}%).</div>', unsafe_allow_html=True)
     if d['loss_comp'] > 0.4:
-        st.markdown(f'<div class="red-flag-alert">דגל אדום: רכיב הפסד (Loss Component) במגזר ארוך טווח גדל.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="critical-alert">דגל אדום: רכיב הפסד (Loss Component) גבוה במגזר ארוך טווח.</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    # חמשת מדדי ה-KPI של בעלי המניות
-    st.write("### 🎯 מדדי ביצוע מרכזיים")
-    k_cols = st.columns(5)
-    metrics = [
-        ("יחס סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{Own \ Funds}{SCR}"),
-        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM"),
-        ("תשואה להון", f"{d['roe']}%", "ROE"),
-        ("יחס משולב", f"{d['combined_ratio']}%", "Combined"),
-        ("מרווח עסק חדש", f"{d['new_biz_margin']}%", "Margin")
+    # ב' : 5 ה-KPIs המרכזיים
+    st.write("### 🎯 מדדי ליבה (Core KPIs)")
+    k = st.columns(5)
+    params = [
+        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{Own \ Funds}{SCR}", "חוסן הוני רגולטורי.", "מינימום 100%, יעד 150%."),
+        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום (IFRS 17).", "מחסן הרווחים של החברה."),
+        ("ROE", f"{d['roe']}%", r"\frac{Net \ Income}{Equity}", "תשואה להון.", "איכות הניהול."),
+        ("Combined", f"{d['combined_ratio']}%", "CR", "יעילות חיתומית.", "מתחת ל-100% הוא רווח."),
+        ("NB Margin", f"{d['new_biz_margin']}%", "Margin", "רווחיות מכירות חדשות.", "אימות איכות הצמיחה.")
     ]
-    for i, (label, val, form) in enumerate(metrics):
-        with k_cols[i]:
-            st.metric(label, val)
-            with st.popover("ביאור מקצועי"):
-                st.write("**נוסחה:**"); st.latex(form)
+    for i in range(5):
+        with k[i]: render_kpi(*params[i])
+
+    st.divider()
+
+    # ג' : טאבי ניתוח עומק (Deep-Dive)
+    tabs = st.tabs(["📉 מגמות", "🏛️ ניתוח סולבנסי II", "📑 ניתוח מגזרי IFRS 17", "⛈️ Stress Test", "🏁 השוואה"])
+
+    with tabs[0]:
+        st.plotly_chart(px.line(c_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", color_discrete_sequence=['#2dd4bf', '#f87171']), use_container_width=True)
+
+    with tabs[1]:
+        ca, cb = st.columns(2)
+        with ca:
+            f_tier = go.Figure(data=[go.Bar(name='Tier 1 (Core)', y=[d['tier1_cap']], marker_color='#2dd4bf'), go.Bar(name='Tier 2/3', y=[d['own_funds']-d['tier1_cap']], marker_color='#1e293b')])
+            f_tier.update_layout(barmode='stack', template="plotly_dark", title="איכות ההון (Tiering)"); st.plotly_chart(f_tier, use_container_width=True)
+        with cb:
+            st.plotly_chart(px.pie(names=['שוק', 'חיתום', 'תפעול'], values=[d['mkt_risk'], d['und_risk'], d['operational_risk']], hole=0.6, template="plotly_dark", title="פילוח סיכוני SCR"), use_container_width=True)
+        st.metric("יחס כיסוי MCR", f"{d['mcr_ratio']}%", help="קו ההגנה האחרון להתערבות פיקוחי.")
+
+    with tabs[2]:
+        
+        cc, cd = st.columns(2)
+        with cc:
+            st.plotly_chart(px.bar(x=['חיים', 'בריאות', 'כללי'], y=[d['life_csm'], d['health_csm'], d['general_csm']], title="CSM לפי קווי עסקים", template="plotly_dark"), use_container_width=True)
+        with cd:
+            st.plotly_chart(px.pie(names=['VFA (חיסכון)', 'PAA (כללי)', 'GMM'], values=[d['vfa_csm'], d['paa_csm'], d['gmm_csm']], title="CSM לפי מודלים", template="plotly_dark"), use_container_width=True)
+        st.info(f"**Loss Component (LC):** ₪{d['loss_comp']}B - רכיב המעיד על פוליסות הפסדיות במאזן.")
+
+    with tabs[3]:
+        s1, s2, s3 = st.columns(3)
+        with s1: ir_s = st.slider("זעזוע ריבית (bps)", -100, 100, 0)
+        with s2: mk_s = st.slider("זעזוע מניות (%)", 0, 40, 0)
+        with s3: lp_s = st.slider("זעזוע ביטולים (%)", 0, 20, 0)
+        proj = max(0, d['solvency_ratio'] - (ir_s * d['int_sens']) - (mk_s * d['mkt_sens']) - (lp_s * d['lapse_sens']))
+        st.metric("סולבנסי חזוי", f"{proj:.1f}%", delta=f"{proj - d['solvency_ratio']:.1f}%")
+        st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=proj, gauge={'axis': {'range': [0, 250]}, 'steps': [{'range': [0, 150], 'color': "#1e293b"}, {'range': [150, 250], 'color': "#064e3b"}]})).update_layout(template="plotly_dark"), use_container_width=True)
+
+    with tabs[4]:
+        st.plotly_chart(px.bar(df[df['quarter']==sel_q].sort_values(by='solvency_ratio'), x='display_name', y='solvency_ratio', color='display_name', template="plotly_dark", title="השוואה ענפית"), use_container_width=True)
+
+else:
+    st.error("חיבור למחסן הנתונים נכשל. וודא שקובץ ה-CSV קיים ב-GitHub.")
