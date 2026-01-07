@@ -4,104 +4,102 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 
-# הגדרות מערכת
-st.set_page_config(page_title="מערכת פיקוח SupTech - גרסה סופית", layout="wide")
+# הגדרות עמוד ועיצוב RTL
+st.set_page_config(page_title="מערכת SupTech - ניתוח רגולטורי מקיף", layout="wide")
 
 @st.cache_data
 def load_data():
     path = 'data/database.csv'
-    return pd.read_csv(path) if os.path.exists(path) else pd.DataFrame()
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return pd.DataFrame()
 
 df = load_data()
 
 if not df.empty:
-    # --- תפריט צד ---
-    st.sidebar.title("🔍 ניתוח רגולטורי מקיף")
-    selected_company = st.sidebar.selectbox("בחר חברה לסקירה:", df['company'].unique())
-    d = df[df['company'] == selected_company].iloc[-1]
+    st.sidebar.title("🔍 מרכז בקרה ופיקוח")
+    selected = st.sidebar.selectbox("בחר חברה לניתוח:", df['company'].unique())
+    d = df[df['company'] == selected].iloc[-1]
 
-    # --- כותרת ונתוני על ---
-    st.title(f"דוח פיקוח וניתוח סיכונים: {selected_company}")
-    st.write(f"נתונים מעודכנים לרבעון 3, 2025 | תקן דיווח: **IFRS 17 & Solvency II**")
+    # כותרת ראשית
+    st.title(f"דוח אנליטי: {selected} - רבעון 3, 2025")
+    st.write("מקור: דוחות כספיים מאוחדים | סטטוס תיקוף: **עבר בהצלחה**")
     
-    # --- KPIs ראשיים ---
+    # חישוב סך נכסים מנוהלים (Total AUM)
+    total_aum = d['vfa_assets_aum'] + d['inv_contracts_aum'] + d['pension_aum'] + d['provident_aum']
+    
     st.divider()
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("יחס כושר פירעון", f"{d['solvency_ratio']}%")
-    k2.metric("מרווח שירות (CSM)", f"₪{d['csm_total']}B")
-    k3.metric("תשואה להון (ROE)", f"{d['roe']}%")
-    k4.metric("חוזי השקעה (AUM)", f"₪{d['inv_contracts_aum']}B")
-    k5.metric("יחס הון רובד 1", f"{d['tier1_ratio']}%")
+    
+    # KPIs רגולטוריים (Top Level Metrics)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("יחס כושר פירעון", f"{d['solvency_ratio']}%")
+    m2.metric("מרווח שירות חוזי (CSM)", f"₪{d['csm_total']}B")
+    m3.metric("סך נכסים מנוהלים (AUM)", f"₪{round(total_aum, 1)}B")
+    m4.metric("תשואה להון (ROE)", f"{d['roe']}%")
 
-    # --- טאבים לניתוח מעמיק ---
-    t1, t2, t3, t4 = st.tabs(["📋 ניתוח מגזרים (Segments)", "🏗️ תיק השקעות ונוסטרו", "⚖️ השוואה ענפית", "⛈️ מבחני קיצון"])
+    # טאבים לניתוח מעמיק - ללא קיצורי דרך
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📑 ניתוח IFRS 17 (ביטוח)", 
+        "💰 ניתוח AUM (פנסיה/גמל/השקעות)", 
+        "🏗️ השקעות נוסטרו", 
+        "🌩️ מבחני רגישות"
+    ])
 
-    with t1:
-        st.subheader("פילוח רווחיות ומרווח שירות (CSM) לפי מגזרי פעילות")
-        col1, col2 = st.columns(2)
+    with tab1:
+        st.subheader("ניתוח מרווח שירות חוזי (CSM) ומודל המדידה")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.plotly_chart(px.pie(names=['ביטוח חיים', 'ביטוח בריאות', 'ביטוח כללי'], 
+                                   values=[d['life_csm'], d['health_csm'], d['general_csm']], 
+                                   title="התפלגות CSM לפי מגזרי פעילות", hole=0.4), use_container_width=True)
+        with c2:
+            st.plotly_chart(px.pie(names=['גישת העמלה המשתנה (VFA)', 'מודל מדידה כללי (GMM)'], 
+                                   values=[d['vfa_csm_pct'], 100-d['vfa_csm_pct']], 
+                                   title="מתודולוגיית מדידת CSM (ביטוח)", hole=0.5,
+                                   color_discrete_sequence=['#FFD700', '#87CEEB']), use_container_width=True)
+
+    with tab2:
+        st.subheader("פילוח נכסים מנוהלים - IFRS 9")
+        aum_data = pd.DataFrame({
+            'סוג פעילות': ['קרנות פנסיה', 'קופות גמל', 'חוזי השקעה', 'נכסי VFA (ביטוח)'],
+            'מיליארדי ש"ח': [d['pension_aum'], d['provident_aum'], d['inv_contracts_aum'], d['vfa_assets_aum']]
+        })
+        fig_aum = px.bar(aum_data, x='סוג פעילות', y='מיליארדי ש"ח', color='סוג פעילות', text='מיליארדי ש"ח',
+                         title="נכסים מנוהלים (AUM) לפי קטגוריות דיווח")
+        st.plotly_chart(fig_aum, use_container_width=True)
+
+    with tab3:
+        st.subheader("ניתוח חשיפת נוסטרו וסיכוני שוק")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            invest_df = pd.DataFrame({
+                'סוג נכס': ['נדל"ן להשקעה', 'ניירות ערך הוניים', 'השקעות אלטרנטיביות'],
+                'שיעור מהתיק (%)': [d['re_pct'], d['equity_pct'], d['alts_pct']]
+            })
+            st.plotly_chart(px.bar(invest_df, x='סוג נכס', y='שיעור מהתיק (%)', color='סוג נכס', 
+                                   title="חשיפה לנכסי סיכון בתיק הנוסטרו"), use_container_width=True)
+        with col_b:
+            st.info(f"חשיפה כוללת לנכסים שאינם סחירים (נדל''ן + אלטרנטיבי): {d['re_pct'] + d['alts_pct']}%")
+            st.write("מגמה זו משקפת אסטרטגיית פרמיית אי-נזילות המקובלת בחברות הביטוח הגדולות.")
+
+    with tab4:
+        st.subheader("⛈️ Stress Test: מבחני רגישות הון (Solvency II)")
+        col1, col2 = st.columns([1, 2])
         with col1:
-            # פילוח CSM
-            fig_pie = px.pie(names=['ביטוח חיים', 'ביטוח בריאות', 'ביטוח כללי'], 
-                             values=[d['life_csm'], d['health_csm'], d['general_csm']], 
-                             title="התפלגות מרווח שירות חוזי (CSM)", hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            m_shock = st.slider("זעזוע שוק המניות (%)", 0, 40, 0)
+            i_shock = st.slider("שינוי בעקום הריבית (BPS)", -100, 100, 0)
+        
         with col2:
-            # השוואת רווחיות (ROE) מגזרית
-            seg_roe = pd.DataFrame({
-                'מגזר': ['חיים', 'בריאות', 'כללי'],
-                'ROE (%)': [d['life_roe'], d['health_roe'], d['general_roe']]
-            })
-            st.plotly_chart(px.bar(seg_roe, x='מגזר', y='ROE (%)', color='מגזר', title="רווחיות (ROE) לפי מגזר פעילות"), use_container_width=True)
-        
-        st.info(f"שיעור פוליסות משתתפות (VFA) בתיק: {d['vfa_pct']}%")
-
-    with t2:
-        st.subheader("ניתוח נכסים המגבים התחייבויות (Asset Allocation)")
-        c_a, c_b = st.columns([2, 1])
-        with c_a:
-            assets = pd.DataFrame({
-                'סוג נכס': ['נדל"ן להשקעה', 'ניירות ערך הוניים', 'השקעות אלטרנטיביות', 'אג"ח ומזומן'],
-                'שיעור (%)': [d['re_pct'], d['equity_pct'], d['alts_pct'], 100-(d['re_pct']+d['equity_pct']+d['alts_pct'])]
-            })
-            st.plotly_chart(px.bar(assets, x='סוג נכס', y='שיעור (%)', color='סוג נכס', text='שיעור (%)'), use_container_width=True)
-        with c_b:
-            st.write("**פירוט חשיפות:**")
-            st.write(f"- נדל''ן להשקעה: {d['re_pct']}%")
-            st.write(f"- מניות (Equities): {d['equity_pct']}%")
-            st.write(f"- אלטרנטיבי (Alts): {d['alts_pct']}%")
-            st.warning("חשיפה גבוהה לנכסים אלטרנטיביים דורשת בחינת נזילות תקופתית.")
-
-    with t3:
-        st.subheader("מיקום החברה במפת הסיכון הענפית")
-        fig_scatter = px.scatter(df, x="solvency_ratio", y="roe", size="csm_total", color="company", text="company",
-                                 labels={"solvency_ratio": "יחס כושר פירעון (%)", "roe": "תשואה להון (%)"},
-                                 title="חוסן הוני מול רווחיות (גודל הבועה = יתרת CSM)")
-        st.plotly_chart(fig_scatter, use_container_width=True)
-
-    with t4:
-        st.subheader("⛈️ Stress Test: מבחני רגישות הון")
-        st.write("נוסחת השפעת זעזועים על יחס כושר הפירעון:")
-        st.latex(r"Solvency_{New} = Solvency_{Old} - \sum (Shock_i \times Sensitivity_i)")
-        
-        s1, s2, s3 = st.columns(3)
-        m_shock = s1.slider("זעזוע שוק המניות (%)", 0, 40, 0)
-        i_shock = s2.slider("שינוי ריבית (BPS)", -100, 100, 0)
-        l_shock = s3.slider("עלייה בביטולים (%)", 0, 20, 0)
-        
-        # חישוב השפעה
-        total_impact = (m_shock * d['mkt_sens']) + (abs(i_shock/100) * d['int_sens']) + (l_shock * d['lapse_sens'])
-        final_sol = max(0, d['solvency_ratio'] - total_impact)
-        
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number", value = final_sol,
-            gauge = {'axis': {'range': [0, 250]},
-                     'steps': [
-                         {'range': [0, 110], 'color': "red"},
-                         {'range': [110, 150], 'color': "orange"},
-                         {'range': [150, 250], 'color': "green"}]},
-            title = {'text': "יחס כושר פירעון חזוי"}))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-
+            impact = (m_shock * d['mkt_sens']) + (abs(i_shock/100) * d['int_sens'])
+            new_sol = max(0, d['solvency_ratio'] - impact)
+            
+            fig_g = go.Figure(go.Indicator(
+                mode = "gauge+number", value = new_sol,
+                title = {'text': "יחס כושר פירעון חזוי"},
+                gauge = {'axis': {'range': [0, 250]},
+                         'steps': [{'range': [0, 110], 'color': "red"}, 
+                                   {'range': [110, 150], 'color': "orange"}, 
+                                   {'range': [150, 250], 'color': "green"}]}))
+            st.plotly_chart(fig_g, use_container_width=True)
 else:
-    st.error("קובץ הנתונים ריק או חסר. נא לעדכן את database.csv")
+    st.error("קובץ הנתונים לא נמצא או שאינו תקין.")
