@@ -1,2 +1,1 @@
-company,year,quarter,solvency_ratio,csm_balance,loss_component,roe,liquidity,data_source,int_sensitivity,mkt_sensitivity,lapse_sensitivity
-Phoenix,2025,Q3,185,12.4,150,14.2,1.2,Estimate,0.12,0.08,0.05
+Phoenix,2025,Q3,185,12.4,150,14.2,1.2,Estimate,6.5,3.2,2.7,0.14,0.11,0.05,92.5
