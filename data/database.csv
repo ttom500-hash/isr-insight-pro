@@ -1,3 +1,3 @@
-company,year,quarter,solvency_ratio,tier1_ratio,csm_total,vfa_pct,loss_component,roe,combined_ratio,liquidity,inv_contracts_aum,life_csm,health_csm,general_csm,life_roe,health_roe,general_roe,re_pct,equity_pct,alts_pct,mkt_sens,int_sens,lapse_sens,data_source
-הפניקס,2025,Q3,182.0,160.0,14.5,82.0,210.0,13.2,92.5,1.4,245.0,7.2,4.1,3.2,14.5,12.0,9.5,8.5,12.0,15.0,0.18,0.12,0.05,AI_Verified
-הראל,2025,Q3,172.0,152.0,11.8,75.0,190.0,12.5,94.2,1.3,182.0,5.9,2.9,3.0,11.8,13.5,10.2,10.5,9.0,11.0,0.15,0.1,0.04,AI_Verified
+company,year,quarter,solvency_ratio,tier1_ratio,csm_total,vfa_csm_pct,loss_component,roe,combined_ratio,liquidity,life_csm,health_csm,general_csm,re_pct,equity_pct,alts_pct,mkt_sens,int_sens,lapse_sens,data_source,vfa_assets_aum,inv_contracts_aum,pension_aum,provident_aum
+הפניקס,2025,Q3,182.0,160.0,14.5,82.0,210.0,13.2,92.5,1.4,7.2,4.1,3.2,8.5,12.0,15.0,0.18,0.12,0.05,AI_Verified,115.0,85.0,145.0,135.0
+הראל,2025,Q3,172.0,152.0,11.8,75.0,190.0,12.5,94.2,1.3,5.9,2.9,3.0,10.5,9.0,11.0,0.15,0.1,0.04,AI_Verified,105.0,62.0,128.0,115.0
