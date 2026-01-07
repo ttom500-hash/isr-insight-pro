@@ -1,26 +1,2 @@
 company,year,quarter,solvency_ratio,csm_balance,loss_component,roe,liquidity,data_source,report_link
-Phoenix,2025,Q3,185,12.4,150,14.2,1.2,Estimate,https://www.fnx.co.il/investor-relations/
-!pip install pdfplumber -q
-import pdfplumber
-import os
-import re
-
-# מוצא את הקובץ באופן אוטומטי מהרשימה בצד שמאל
-pdf_files = [f for f in os.listdir() if f.endswith('.pdf')]
-
-if not pdf_files:
-    print("❌ לא נמצא אף קובץ PDF! ודא שהעלית את הדוח לחלונית בצד שמאל.")
-else:
-    target = pdf_files[0]
-    print(f"✅ מנתח את הקובץ: {target}")
-    with pdfplumber.open(target) as pdf:
-        text = "".join([p.extract_text() for p in pdf.pages[:15]])
-    
-    # חילוץ הנתונים עבור ה-GitHub
-    solv = re.search(r"(?:יחס כושר פירעון|סולבנסי).*?(\d{2,3})%", text)
-    csm_val = re.search(r"(?:CSM|מרווח שירות).*?(\d{1,2}\.?\d*)", text)
-    
-    print("\n--- 📝 העתק את השורה הזו ל-GitHub ---")
-    solvency_result = solv.group(1) if solv else "185"
-    csm_result = csm_val.group(1) if csm_val else "12.4"
-    print(f"Phoenix,2025,Q3,{solvency_result},{csm_result},150,14.2,1.2,Estimate")
+Phoenix,2025,Q3,185,12.4,150,14.2,1.2,Estimate,https://www.fnx.co.il/investor-relations
