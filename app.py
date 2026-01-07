@@ -6,7 +6,7 @@ import pdfplumber
 import os
 from datetime import date
 
-# --- 1. Apex Professional Config & Branding ---
+# --- 1. Apex Brand & Core Configuration ---
 st.set_page_config(page_title="Apex - SupTech Master Intelligence", page_icon="🛡️", layout="wide")
 
 # פונקציית שעון החול המקורית
@@ -15,16 +15,16 @@ def get_countdown():
     days_left = (target - date.today()).days
     return max(0, days_left)
 
-# טעינת נתונים עם ניקוי ותיקוף עמודות
+# טעינת נתונים עם ניקוי ותיקוף עמודות (מניעת KeyErrors)
 @st.cache_data
 def load_data():
     path = 'data/database.csv'
     if not os.path.exists(path):
         return pd.DataFrame()
     df = pd.read_csv(path)
-    # תיקון שמות עמודות (מניעת KeyErrors)
-    df.columns = df.columns.str.strip()
-    # המרת נתונים למספרים
+    df.columns = df.columns.str.strip() # הסרת רווחים משמות עמודות
+    
+    # המרת נתונים למספרים בצורה בטוחה
     numeric_cols = df.columns.drop(['company', 'quarter'])
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -45,20 +45,20 @@ df = load_data()
 
 with st.sidebar:
     st.title("🛡️ Apex SupTech")
-    st.caption("גרסת הליבה 2026 | IFRS 17 & Solvency II")
+    st.caption("גרסה מקצועית 2026 | IFRS 17 & Solvency II")
     st.divider()
     
     # הצגת "שעון החול" המקורי
     days = get_countdown()
     st.subheader("⏳ שעון חול לדיווח")
     st.metric("ימים לפרסום דוחות 2025", f"{days}")
-    if days < 60:
+    if days < 90:
         st.warning("שים לב: תקופת ביקורת הדוחות החלה")
     
     st.divider()
 
-    # פורטל טעינה משולחן העבודה (בתוך Expander לשמירה על ניקיון)
-    with st.expander("📂 פורטל טעינה (Local)"):
+    # פורטל טעינה משולחן העבודה
+    with st.expander("📂 פורטל טעינה (Local PDF)"):
         st.write("גרור PDF מחלונית הדיווחים בשולחן העבודה")
         uploaded_pdf = st.file_uploader("טעינה לעיבוד", type=['pdf'])
         if uploaded_pdf:
@@ -71,15 +71,15 @@ with st.sidebar:
         df_comp = df[df['company'] == sel_comp].sort_values(by=['year', 'quarter'], ascending=False)
         sel_q = st.selectbox("בחר רבעון:", df_comp['quarter'].unique())
         
-        # שליפת נתוני התקופה
+        # שליפת נתוני התקופה הנבחרת
         d = df_comp[df_comp['quarter'] == sel_q].iloc[0]
 
-# --- 3. Main Dashboard: Apex Original Depth ---
+# --- 3. Main Dashboard: Apex Master View ---
 if not df.empty:
     st.title(f"דוח פיקוחי מאוחד: {sel_comp}")
-    st.info(f"תקופה: {sel_q} {int(d['year'])} | סטטוס: Verified Data Access")
+    st.info(f"תקופה: {sel_q} {int(d['year'])} | המערכת במצב מעקב Verified")
 
-    # שחזור 5 ה-KPIs המקוריים
+    # שחזור 5 ה-KPIs המקוריים בפריסה מושלמת
     st.divider()
     m1, m2, m3, m4, m5 = st.columns(5)
     
@@ -100,7 +100,7 @@ if not df.empty:
                       "רווחיות המכירות החדשות שבוצעו ברבעון הדיווח.", r"Margin = \frac{CSM_{new}}{PV \ Premium}")
 
     # טאבים מקצועיים ששוחזרו במלואם
-    t1, t2, t3, t4 = st.tabs(["🏛️ חוסן הוני", "📑 רווחיות (IFRS 17)", "⛈️ Stress Test", "📈 מגמות"])
+    t1, t2, t3, t4 = st.tabs(["🏛️ חוסן הוני (Solvency)", "📑 רווחיות (IFRS 17)", "⛈️ Stress Test", "📈 מגמות"])
 
     with t1:
         st.subheader("ניתוח דרישות הון (Solvency II)")
@@ -114,8 +114,9 @@ if not df.empty:
             fig_bar.update_layout(title="הון מול דרישה (₪ מיליארד)", barmode='group')
             st.plotly_chart(fig_bar, use_container_width=True)
         with cb:
+            # תיקון הבאג: שימוש בפרמטר הנכון data_frame
             risk_df = pd.DataFrame({'קטגוריה': ['שוק', 'חיתום', 'תפעולי'], 'סכום': [d['mkt_risk'], d['und_risk'], d['operational_risk']]})
-            st.plotly_chart(px.pie(risk_data=risk_df, names='קטגוריה', values='סכום', title="פילוח רכיבי סיכון", hole=0.4), use_container_width=True)
+            st.plotly_chart(px.pie(risk_df, names='קטגוריה', values='סכום', title="פילוח רכיבי סיכון", hole=0.4), use_container_width=True)
 
     with t2:
         st.subheader("ניתוח IFRS 17 ומגזרי פעילות")
@@ -130,8 +131,7 @@ if not df.empty:
 
     with t3:
         st.subheader("⛈️ Stress Test: רגישות שוק המניות")
-        st.write("בחינת השפעת ירידת שוק המניות על יחס הסולבנסי:")
-        shock = st.slider("עוצמת ירידה בשוק (%)", 0, 40, 0)
+        shock = st.slider("בחר עוצמת ירידה בשוק (%)", 0, 40, 0)
         proj_sol = max(0, d['solvency_ratio'] - (shock * d['mkt_sens']))
         
         fig_g = go.Figure(go.Indicator(
