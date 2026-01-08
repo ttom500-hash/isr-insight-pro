@@ -7,7 +7,7 @@ import feedparser
 import os
 from datetime import datetime
 
-# --- 1. הגדרות מערכת ועיצוב Executive Slate (v57.0 VALIDATED) ---
+# --- 1. הגדרות מערכת ועיצוב Executive Slate (v60.0 VALIDATED) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
 @st.cache_data(ttl=600)
@@ -36,7 +36,7 @@ def get_regulatory_news():
         ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml"),
         ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml")
     ]
-    keywords = ["ביטוח", "פנסיה", "גמל", "סולבנסי", "ריבית", "אינפלציה", "שוק ההון", "אג\"ח", "חיתום", "CSM", "IFRS", "דיבידנד", "רגולציה", "רשות שוק ההון"]
+    keywords = ["ביטוח", "פנסיה", "גמל", "סולבנסי", "ריבית", "אינפלציה", "שוק ההון", "אג\"ח", "חיתום", "CSM", "IFRS", "דיבידנד", "רגולציה", "רשות שוק ההון", "הפניקס", "הראל", "מגדל", "כלל", "מנורה"]
     news_parts = []
     seen = set()
     for src, url in feeds:
@@ -90,64 +90,64 @@ def render_pro_kpi(label, value, formula, description, note):
     with st.expander("🔍 ניתוח מקצועי"):
         st.write(f"**מהות:** {description}"); st.divider(); st.latex(formula); st.info(f"**דגש:** {note}")
 
-# --- 3. SIDEBAR (חלון החיפוש והגרירה) ---
+# --- 3. SIDEBAR ---
 df = load_data()
+d = None
 with st.sidebar:
     st.markdown("<h1 style='color:#3b82f6; margin-bottom:0;'>🛡️ APEX PRO</h1>", unsafe_allow_html=True)
     st.divider()
     if not df.empty:
-        st.subheader("🔍 חלון חיפוש")
         s_comp = st.selectbox("בחר חברה:", sorted(df['display_name'].unique()), key="sb_c")
-        
-        # סינון רבעונים שקיימים בפועל עבור החברה שנבחרה
         comp_df = df[df['display_name'] == s_comp].sort_values(by=['year', 'quarter'], ascending=False)
         available_quarters = comp_df['quarter'].unique()
         
-        s_q = st.selectbox("בחר רבעון:", available_quarters, key="sb_q")
-        
-        # ניסיון חילוץ שורה
-        filtered_row = comp_df[comp_df['quarter'] == s_q]
-        d = filtered_row.iloc[0] if not filtered_row.empty else None
+        if len(available_quarters) > 0:
+            s_q = st.selectbox("בחר רבעון:", available_quarters, key="sb_q")
+            filtered_row = comp_df[comp_df['quarter'] == s_q]
+            if not filtered_row.empty:
+                d = filtered_row.iloc[0]
         
         if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
     st.divider()
     st.subheader("📂 חלון גרירת קבצים")
-    st.file_uploader("טען דוח PDF לעדכון", type=['pdf'], key="pdf_up")
+    st.file_uploader("טען דוח PDF", type=['pdf'], key="pdf_up")
 
-# --- 4. DASHBOARD LOGIC ---
+# --- 4. DASHBOARD ---
 if not df.empty and d is not None:
     st.title(f"{s_comp} | סקירה ניהולית {s_q}")
     
-    # KPIs
     k_cols = st.columns(5)
     k_meta = [
-        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{OF}{SCR}", "חוסן הוני.", "יעד 150%."),
-        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום.", "IFRS 17."),
-        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "יעילות."),
-        ("Combined", f"{d['combined_ratio']}%", "CR", "חיתום.", "אלמנטרי."),
-        ("NB Margin", f"{d['new_biz_margin']}%", "Margin", "רווחיות מכירות.", "צמיחה.")
+        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"Ratio = \frac{Own \ Funds}{SCR}", "חוסן הוני לספיגת הפסדים.", "יעד 150%."),
+        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום (IFRS 17).", "מחסן הרווחים."),
+        ("ROE", f"{d['roe']}%", r"ROE = \frac{NI}{Equity}", "תשואה להון המושקע.", "יעילות הניהול."),
+        ("Combined", f"{d['combined_ratio']}%", "CR", "היחס המשולב באלמנטרי.", "מתחת ל-100% רווח."),
+        ("NB Margin", f"{d['new_biz_margin']}%", "Margin", "רווחיות מכירות חדשות.", "אימות צמיחה.")
     ]
     for i in range(5):
         with k_cols[i]: render_pro_kpi(*k_meta[i])
 
     st.divider()
-    tabs = st.tabs(["📉 מגמות", "🏛️ סולבנסי II", "📑 מגזרים", "⛈️ Stress Test", "🏁 השוואה"])
+    t1, t2, t3, t4, t5 = st.tabs(["📉 מגמות", "🏛️ סולבנסי II", "📑 מגזרים", "⛈️ Stress Test", "🏁 השוואה"])
 
-    with tabs[0]:
+    with t1:
         st.plotly_chart(px.line(comp_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         r_cols = st.columns(3)
-        with r_cols[0]: render_pro_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"Loss", "איכות חיתום.", "עלייה = סיכון.")
+        with r_cols[0]: render_pro_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"Loss", "איכות חיתום.", "דגל אדום בעלייה.")
         with r_cols[1]: render_pro_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב הכרת רווח.", "שימור המחסן.")
         with r_cols[2]: render_pro_kpi("תשואת השקעות", f"{d['inv_yield']}%", r"Yield", "ביצועי תיק.", "קריטי ליעדים.")
 
-    with tabs[1]:
+    with t2:
+        
         ca, cb = st.columns(2)
         with ca:
             f = go.Figure(data=[go.Bar(name='Tier 1', y=[d['tier1_cap']], marker_color='#3b82f6'), go.Bar(name='Tier 2/3', y=[d['own_funds']-d['tier1_cap']], marker_color='#334155')])
             f.update_layout(barmode='stack', template="plotly_dark", height=300, title="מבנה איכות ההון", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(f, use_container_width=True)
         with cb: st.plotly_chart(px.pie(names=['שוק', 'חיתום', 'תפעול'], values=[d['mkt_risk'], d['und_risk'], d['operational_risk']], hole=0.6, template="plotly_dark", height=300, title="סיכוני SCR").update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
-    with tabs[2]:
+    with t3:
+        
+        st.write("### 📑 רווחיות (CSM) מול חוזים מפסידים (LC) לפי מגזר")
         sn = ['חיים', 'בריאות', 'כללי']
         f_seg = go.Figure(data=[
             go.Bar(name='CSM (רווח)', x=sn, y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'),
@@ -156,22 +156,22 @@ if not df.empty and d is not None:
         f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(f_seg, use_container_width=True)
 
-    with tabs[3]: # Stress Test עם ביטולים
+    with t4:
         s1, s2, s3 = st.columns(3)
-        with s1: ir_s = st.slider("ריבית (bps)", -100, 100, 0, key="irs")
-        with s2: mk_s = st.slider("מניות (%)", 0, 40, 0, key="mks")
-        with s3: lp_s = st.slider("ביטולים (%)", 0, 20, 0, key="lps")
+        with s1: ir_s = st.slider("ריבית", -100, 100, 0, key="irs")
+        with s2: mk_s = st.slider("מניות", 0, 40, 0, key="mks")
+        with s3: lp_s = st.slider("ביטולים", 0, 20, 0, key="lps")
         impact = (ir_s * d['int_sens']) + (mk_s * d['mkt_sens']) + (lp_s * d['lapse_sens'])
         proj = d['solvency_ratio'] - impact
         st.metric("סולבנסי חזוי", f"{proj:.1f}%", delta=f"{-impact:.1f}%", delta_color="inverse")
         st.plotly_chart(go.Figure(go.Indicator(mode="gauge+number", value=proj, gauge={'axis': {'range': [0, 250]}, 'steps': [{'range': [0, 150], 'color': "#334155"}]})).update_layout(template="plotly_dark", height=250, paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
-    with tabs[4]:
+    with t5:
         pm = st.selectbox("בחר מדד להשוואה:", ['solvency_ratio', 'roe', 'inv_yield', 'csm_total'])
         st.plotly_chart(px.bar(df[df['quarter']==s_q].sort_values(by=pm), x='display_name', y=pm, color='display_name', template="plotly_dark", height=300, text_auto=True).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
-elif d is None:
-    st.warning(f"### ⚠️ נתונים חסרים עבור {s_comp} לרבעון {s_q}")
-    st.info("בבסיס הנתונים הנוכחי אין מידע עבור התקופה שנבחרה. תוכל להעלות דוח PDF ב-Sidebar כדי לעדכן את המחסן.")
+elif d is None and s_comp != "":
+    st.warning(f"### ⚠️ נתונים טרם פורסמו עבור {s_comp}")
+    st.info("בבסיס הנתונים אין מידע זמין לרבעון הנבחר.")
 else:
-    st.error("לא נמצא מחסן נתונים.")
+    st.error("שגיאה בטעינת המחסן.")
