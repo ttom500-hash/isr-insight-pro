@@ -6,7 +6,7 @@ import yfinance as yf
 import feedparser
 import os
 
-# --- 1. הגדרות מערכת ועיצוב EXECUTIVE (v65.0) ---
+# --- 1. הגדרות מערכת ועיצוב EXECUTIVE (v66.0) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
 # פונקציית מדדי שוק (בורסה, מט"ח, ריבית) - משיכה חסינה
@@ -20,7 +20,6 @@ def get_market_data():
     try:
         for sym, name in tickers.items():
             try:
-                # משיכה פרטנית למניעת תקלות
                 t = yf.Ticker(sym)
                 hist = t.history(period="2d")
                 if not hist.empty:
@@ -31,11 +30,11 @@ def get_market_data():
                     parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({arr}{pct:.2f}%)</span>')
             except: continue
         return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדי שוק..."
-    except: return "מתחבר למסוף הנתונים..."
+    except: return "מתחבר לנתונים..."
 
-# מנוע מבזקים רגולטורי חכם (סריקת עומק שבועית)
+# מנוע מבזקים רגולטורי (סריקת עומק שבועית)
 @st.cache_data(ttl=900)
-def get_smart_news():
+def get_regulatory_news():
     feeds = [
         ("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"),
         ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml"),
@@ -52,51 +51,56 @@ def get_smart_news():
                     news_items.append(f"🚩 {src}: {entry.title}")
                     seen.add(entry.title)
         except: continue
-    return " &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; ".join(news_items) if news_items else "המערכת סורקת פרסומים רגולטוריים..."
+    return " &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; ".join(news_items) if news_items else "סורק פרסומים רגולטוריים..."
 
 m_ticker_html = get_market_data()
-n_ticker_html = get_smart_news()
+n_ticker_html = get_regulatory_news()
 
-# CSS - הפרדה צבעונית מוחלטת
+# CSS - פתרון בעיית ההסתרה של המדדים
 st.markdown(f"""
     <style>
-    /* רקע האפליקציה - Slate Blue */
+    /* רקע האפליקציה */
     .stApp {{ background-color: #0f172a !important; }}
     
-    /* קונטיינר הסרגלים בראש הדף */
-    .ticker-wrapper {{
-        position: fixed; top: 0; left: 0; width: 100%; z-index: 99999;
+    /* קונטיינר הסרגלים - מוסט שמאלה כדי לא להסתתר תחת ה-Sidebar */
+    .ticker-header {{
+        position: fixed; top: 0; left: 0; 
+        width: calc(100% - 21rem); /* 21rem הוא רוחב ה-Sidebar הסטנדרטי */
+        z-index: 9999;
     }}
     
-    /* סרגל בורסה - שחור פחם (Carbon Black) להפרדה מהרקע */
+    /* סרגל בורסה - שחור פחם */
     .m-strip {{
         background-color: #000000; padding: 12px 0; border-bottom: 1px solid #334155;
         overflow: hidden; white-space: nowrap;
     }}
     
-    /* סרגל חדשות - בורדו עמוק */
+    /* סרגל חדשות - בורדו */
     .n-strip {{
-        background-color: #450a0a; padding: 8px 0; border-bottom: 2px solid #7a1a1c;
+        background-color: #450a0a; padding: 7px 0; border-bottom: 2px solid #7a1a1c;
         overflow: hidden; white-space: nowrap;
     }}
     
     .scroll-content {{
-        display: inline-block; padding-right: 100%; animation: tickerMove 70s linear infinite;
-        font-family: 'Segoe UI', sans-serif; font-size: 0.92rem; color: #ffffff !important;
+        display: inline-block; padding-right: 100%; animation: tickerMove 75s linear infinite;
+        font-family: sans-serif; font-size: 0.92rem; color: #ffffff !important;
     }}
     @keyframes tickerMove {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
     
+    /* מרווח לתוכן המרכזי */
     .content-offset {{ margin-top: 130px; }}
 
-    /* Sidebar ועיצוב רכיבים */
-    [data-testid="stSidebar"] {{ background-color: #1e293b !important; z-index: 100000 !important; border-left: 1px solid #334155; }}
+    /* Sidebar - חלון החיפוש */
+    [data-testid="stSidebar"] {{ background-color: #1e293b !important; z-index: 10000 !important; border-left: 1px solid #334155; }}
+    
+    /* מדדים והסברים */
     div[data-testid="stMetric"] {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; }}
     div[data-testid="stMetricValue"] {{ color: #3b82f6 !important; font-weight: 700 !important; }}
     </style>
     
-    <div class="ticker-wrapper">
+    <div class="ticker-header">
         <div class="m-strip"><div class="scroll-content">{m_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_ticker_html}</div></div>
-        <div class="n-line n-strip"><div class="scroll-content">📢 מודיעין פיננסי ורגולטורי: {n_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker_html}</div></div>
+        <div class="n-strip"><div class="scroll-content">📢 מודיעין פיננסי ורגולטורי: {n_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker_html}</div></div>
     </div>
     <div class="content-offset"></div>
     """, unsafe_allow_html=True)
@@ -125,7 +129,8 @@ with st.sidebar:
         d = comp_df[comp_df['quarter'] == s_q].iloc[0]
         if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
     st.divider()
-    st.file_uploader("📂 חלון גרירת PDF", type=['pdf'], key="pdf_up")
+    st.subheader("📂 חלון גרירת קבצים")
+    st.file_uploader("טען דוח PDF", type=['pdf'], key="pdf_up")
 
 # --- 3. DASHBOARD ---
 def render_kpi(label, value, formula, desc, note):
@@ -166,7 +171,6 @@ if not df.empty and d is not None:
         with cb: st.plotly_chart(px.pie(names=['שוק', 'חיתום', 'תפעול'], values=[d['mkt_risk'], d['und_risk'], d['operational_risk']], hole=0.6, template="plotly_dark", height=300, title="סיכוני SCR").update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
     with tabs[2]:
-        
         st.write("### 📑 רווחיות (CSM) מול חוזים מפסידים (LC) לפי מגזר")
         sn = ['חיים', 'בריאות', 'כללי']
         f_seg = go.Figure(data=[
