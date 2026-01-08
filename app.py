@@ -7,7 +7,7 @@ import feedparser
 import os
 from datetime import datetime
 
-# --- 1. הגדרות מערכת וסרגלים כפולים (v52 FULLY VALIDATED) ---
+# --- 1. הגדרות מערכת וסרגלים כפולים (v53.0 FIXED SYNTAX) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
 # פונקציה חסינה למשיכת מדדי שוק
@@ -28,10 +28,10 @@ def get_market_ticker():
                     arr = "▲" if pct >= 0 else "▼"
                     parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({arr}{pct:.2f}%)</span>')
             except: continue
-        return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדים..."
+        return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדי שוק..."
     except: return "מתחבר לבורסה..."
 
-# מנוע חדשות רגולטורי מורחב (כולל ארכיון וסינון נושאים)
+# מנוע חדשות רגולטורי מורחב
 @st.cache_data(ttl=1800)
 def get_regulatory_news():
     feeds = [
@@ -45,7 +45,7 @@ def get_regulatory_news():
     for src, url in feeds:
         try:
             f = feedparser.parse(url)
-            for entry in f.entries[:30]: # סריקה רחבה להבאת חדשות מימים קודמים
+            for entry in f.entries[:30]:
                 if any(k in entry.title for k in keywords) and entry.title not in seen:
                     news_parts.append(f"🚩 {src}: {entry.title}")
                     seen.add(entry.title)
@@ -55,7 +55,7 @@ def get_regulatory_news():
 m_content = get_market_ticker()
 n_content = get_regulatory_news()
 
-# CSS - הגנה על ה-Sidebar, מניעת חפיפה וביטול expand_more
+# CSS - הגנה על חלון החיפוש, מניעת חפיפה וביטול expand_more
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #020617 !important; }}
@@ -72,7 +72,7 @@ st.markdown(f"""
     @keyframes tScroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
     .body-spacer {{ margin-top: 115px; }}
 
-    /* חלון חיפוש (Sidebar) - שכבה עליונה */
+    /* Sidebar (חלון החיפוש והגרירה) - שכבה עליונה */
     [data-testid="stSidebar"] {{ background-color: #0f172a !important; z-index: 100000 !important; border-left: 1px solid #1e293b; }}
     [data-testid="stExpanderChevron"], i, svg {{ font-family: 'Material Icons' !important; text-transform: none !important; }}
     
@@ -102,72 +102,4 @@ def load_data():
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     return df
 
-def render_detailed_kpi(label, value, formula, desc, note):
-    st.metric(label, value)
-    with st.expander("🔍 ניתוח מקצועי"):
-        st.write(f"**מהות:** {desc}"); st.divider(); st.latex(formula); st.info(f"**דגש למפקח:** {note}")
-
-# --- 3. SIDEBAR (חלון החיפוש והגרירה) ---
-df = load_data()
-with st.sidebar:
-    st.markdown("<h1 style='color:#3b82f6; margin-bottom:0;'>🛡️ APEX PRO</h1>", unsafe_allow_html=True)
-    st.divider()
-    if not df.empty:
-        st.subheader("🔍 חלון חיפוש")
-        s_comp = st.selectbox("בחר חברה:", sorted(df['display_name'].unique()), key="sb_c")
-        c_df = df[df['display_name'] == s_comp].sort_values(by=['year', 'quarter'], ascending=False)
-        s_q = st.selectbox("בחר רבעון:", c_df['quarter'].unique(), key="sb_q")
-        d = c_df[c_df['quarter'] == s_q].iloc[0]
-        if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
-    st.divider()
-    st.subheader("📂 חלון גרירת קבצים")
-    st.file_uploader("טען דוח PDF לעדכון", type=['pdf'], key="pdf_up")
-
-# --- 4. DASHBOARD ---
-if not df.empty:
-    st.title(f"{s_comp} | סקירה ניהולית {s_q}")
-    
-    # 5 המדדים הקריטיים
-    k_cols = st.columns(5)
-    k_params = [
-        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{Own \ Funds}{SCR}", "חוסן הוני לספיגת הפסדים.", "יעד 150%."),
-        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום (IFRS 17).", "מחסן הרווחים."),
-        ("ROE", f"{d['roe']}%", r"\frac{Net \ Inc}{Equity}", "תשואה להון המושקע.", "יעילות הניהול."),
-        ("Combined", f"{d['combined_ratio']}%", "CR", "חיתום אלמנטרי.", "מתחת ל-100% רווח."),
-        ("NB Margin", f"{d['new_biz_margin']}%", "NB \ Margin", "רווחיות מכירות חדשות.", "איכות צמיחה.")
-    ]
-    for i in range(5):
-        with k_cols[i]: render_detailed_kpi(*k_params[i])
-
-    st.divider()
-    t1, t2, t3, t4, t5 = st.tabs(["📉 מגמות ויחסים", "🏛️ סולבנסי II", "📑 מגזרים (IFRS 17)", "⛈️ Stress Test", "🏁 השוואה"])
-
-    with t1: # מגמות ויחסים משלימים
-        st.plotly_chart(px.line(c_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280), use_container_width=True)
-        st.write("### 📊 יחסים פיננסיים משלימים")
-        r_cols = st.columns(3)
-        with r_cols[0]: render_detailed_kpi("יחס תביעות", f"{d['loss_ratio']}%", r"\frac{Claims}{Premium}", "איכות חיתום נטו.", "עלייה מעידה על סיכון.")
-        with r_cols[1]: render_detailed_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב הכרת הרווח.", "שימור המחסן.")
-        with r_cols[2]: render_detailed_kpi("תשואת השקעות", f"{d['inv_yield']}%", r"Yield", "ביצועי תיק ההשקעות.", "קריטי לעמידה בהתחייבויות.")
-
-    with t2: # סולבנסי
-        ca, cb = st.columns(2)
-        with ca:
-            f = go.Figure(data=[go.Bar(name='Tier 1', y=[d['tier1_cap']], marker_color='#3b82f6'), go.Bar(name='Tier 2/3', y=[d['own_funds']-d['tier1_cap']], marker_color='#1e293b')])
-            f.update_layout(barmode='stack', template="plotly_dark", height=300, title="מבנה איכות ההון"); st.plotly_chart(f, use_container_width=True)
-        with cb: st.plotly_chart(px.pie(names=['שוק', 'חיתום', 'תפעול'], values=[d['mkt_risk'], d['und_risk'], d['operational_risk']], hole=0.6, template="plotly_dark", height=300, title="סיכוני SCR"), use_container_width=True)
-
-    with t3: # מגזרים - CSM מול חוזים מפסידים (LC)
-        st.write("### 📑 רווחיות (CSM) מול חוזים מפסידים (LC) לפי מגזר")
-        sn = ['חיים', 'בריאות', 'כללי']
-        f_seg = go.Figure(data=[
-            go.Bar(name='CSM (רווח)', x=sn, y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'),
-            go.Bar(name='Loss Component (הפסד)', x=sn, y=[d['life_lc'], d['health_lc'], d['general_lc']], marker_color='#f87171')
-        ])
-        f_seg.update_layout(barmode='group', template="plotly_dark", height=350)
-        st.plotly_chart(f_seg, use_container_width=True)
-
-    with t4: # Stress Test מלא עם ביטולים
-        s1, s2, s3 = st.columns(3)
-        with s1: ir_s = st.slider("ריבית (bps)", -100, 100, 0, key="irs")
-        with s2: mk_s = st.slider("מניות (%)", 0,
+def render
