@@ -5,19 +5,22 @@ import plotly.graph_objects as go
 import yfinance as yf
 import feedparser
 import os
-from datetime import datetime, timedelta
 
-# --- 1. הגדרות מערכת ועיצוב EXECUTIVE SLATE (v63.0) ---
+# --- 1. הגדרות מערכת ועיצוב EXECUTIVE (v65.0) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
-# פונקציית מדדי שוק (בורסה, מט"ח, ריבית)
-@st.cache_data(ttl=600)
-def get_market_ticker():
-    tickers = {'^TA125.TA': 'ת"א 125', 'ILS=X': 'USD/ILS', 'EURILS=X': 'EUR/ILS', '^GSPC': 'S&P 500', '^TNX': 'ריבית (10Y)'}
+# פונקציית מדדי שוק (בורסה, מט"ח, ריבית) - משיכה חסינה
+@st.cache_data(ttl=300)
+def get_market_data():
+    tickers = {
+        '^TA125.TA': 'ת"א 125', 'ILS=X': 'USD/ILS', 'EURILS=X': 'EUR/ILS',
+        '^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^TNX': 'ריבית (10Y)'
+    }
     parts = []
     try:
         for sym, name in tickers.items():
             try:
+                # משיכה פרטנית למניעת תקלות
                 t = yf.Ticker(sym)
                 hist = t.history(period="2d")
                 if not hist.empty:
@@ -28,83 +31,74 @@ def get_market_ticker():
                     parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({arr}{pct:.2f}%)</span>')
             except: continue
         return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדי שוק..."
-    except: return "מתחבר לבורסה..."
+    except: return "מתחבר למסוף הנתונים..."
 
-# מנוע מבזקים חכם - סריקת עומק שבועית וסינון רגולטורי
-@st.cache_data(ttl=900) # מתרענן כל 15 דקות
-def get_smart_regulatory_news():
+# מנוע מבזקים רגולטורי חכם (סריקת עומק שבועית)
+@st.cache_data(ttl=900)
+def get_smart_news():
     feeds = [
         ("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"),
         ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml"),
         ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml")
     ]
-    
-    # מילות מפתח מורחבות למפקח
-    keywords = [
-        "ביטוח", "חברת ביטוח", "רשות שוק ההון", "הממונה", "פנסיה", "גמל", 
-        "סולבנסי", "Solvency", "IFRS 17", "CSM", "הון עצמי", "דיבידנד", 
-        "הפניקס", "הראל", "מגדל", "כלל", "מנורה", "איילון", "הכשרה", 
-        "חוזר מפקח", "תביעה ייצוגית", "מיזוג", "רכישה", "עסקת בעלי עניין",
-        "ריבית", "בנק ישראל", "אינפלציה", "מדד המחירים"
-    ]
-    
+    keywords = ["ביטוח", "פנסיה", "גמל", "סולבנסי", "ריבית", "אינפלציה", "שוק ההון", "אג\"ח", "חיתום", "CSM", "IFRS", "דיבידנד", "רגולציה", "רשות שוק ההון", "הפניקס", "הראל", "מגדל", "כלל", "מנורה"]
     news_items = []
-    seen_titles = set()
-
+    seen = set()
     for src, url in feeds:
         try:
-            feed = feedparser.parse(url)
-            # סריקה של כל הפריטים הזמינים בפיד (Backfill שבועי)
-            for entry in feed.entries:
-                title = entry.title
-                if any(key in title for key in keywords) and title not in seen_titles:
-                    # חילוץ תאריך במידה וקיים לטובת שקיפות
-                    news_items.append(f"🚩 {src}: {title}")
-                    seen_titles.add(title)
+            f = feedparser.parse(url)
+            for entry in f.entries[:40]:
+                if any(k in entry.title for k in keywords) and entry.title not in seen:
+                    news_items.append(f"🚩 {src}: {entry.title}")
+                    seen.add(entry.title)
         except: continue
-    
-    # אם עדיין אין מספיק חדשות ממוקדות, ניקח כותרות כלכליות ראשיות כדי שהסרגל לא יהיה ריק
-    if len(news_items) < 10:
-        for src, url in feeds:
-            try:
-                feed = feedparser.parse(url)
-                for entry in feed.entries[:10]:
-                    if entry.title not in seen_titles:
-                        news_items.append(f"🌐 {src}: {entry.title}")
-                        seen_titles.add(entry.title)
-            except: continue
-            
     return " &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; ".join(news_items) if news_items else "המערכת סורקת פרסומים רגולטוריים..."
 
-m_ticker = get_market_ticker()
-n_ticker = get_smart_regulatory_news()
+m_ticker_html = get_market_data()
+n_ticker_html = get_smart_news()
 
-# CSS - עיצוב EXECUTIVE SLATE וקיבוע סרגלים
+# CSS - הפרדה צבעונית מוחלטת
 st.markdown(f"""
     <style>
+    /* רקע האפליקציה - Slate Blue */
     .stApp {{ background-color: #0f172a !important; }}
     
-    .ticker-header {{ position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; background-color: #1e293b; }}
-    .m-line {{ background-color: #1e293b; padding: 10px 0; border-bottom: 1px solid #334155; overflow: hidden; }}
-    .n-line {{ background-color: #450a0a; padding: 7px 0; overflow: hidden; border-bottom: 2px solid #7a1a1c; }}
-    
-    .scroll-text {{
-        display: inline-block; padding-right: 100%; animation: tScroll 75s linear infinite;
-        font-family: sans-serif; font-size: 0.9rem; white-space: nowrap; color: #f1f5f9 !important;
+    /* קונטיינר הסרגלים בראש הדף */
+    .ticker-wrapper {{
+        position: fixed; top: 0; left: 0; width: 100%; z-index: 99999;
     }}
-    @keyframes tScroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
-    .body-spacer {{ margin-top: 120px; }}
+    
+    /* סרגל בורסה - שחור פחם (Carbon Black) להפרדה מהרקע */
+    .m-strip {{
+        background-color: #000000; padding: 12px 0; border-bottom: 1px solid #334155;
+        overflow: hidden; white-space: nowrap;
+    }}
+    
+    /* סרגל חדשות - בורדו עמוק */
+    .n-strip {{
+        background-color: #450a0a; padding: 8px 0; border-bottom: 2px solid #7a1a1c;
+        overflow: hidden; white-space: nowrap;
+    }}
+    
+    .scroll-content {{
+        display: inline-block; padding-right: 100%; animation: tickerMove 70s linear infinite;
+        font-family: 'Segoe UI', sans-serif; font-size: 0.92rem; color: #ffffff !important;
+    }}
+    @keyframes tickerMove {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
+    
+    .content-offset {{ margin-top: 130px; }}
 
+    /* Sidebar ועיצוב רכיבים */
     [data-testid="stSidebar"] {{ background-color: #1e293b !important; z-index: 100000 !important; border-left: 1px solid #334155; }}
     div[data-testid="stMetric"] {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; }}
     div[data-testid="stMetricValue"] {{ color: #3b82f6 !important; font-weight: 700 !important; }}
     </style>
     
-    <div class="ticker-header">
-        <div class="m-line"><div class="scroll-text">{m_ticker} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_ticker}</div></div>
-        <div class="n-line"><div class="scroll-text">📢 מודיעין רגולטורי ופיננסי (עדכוני שבוע): {n_ticker} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker}</div></div>
+    <div class="ticker-wrapper">
+        <div class="m-strip"><div class="scroll-content">{m_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_ticker_html}</div></div>
+        <div class="n-line n-strip"><div class="scroll-content">📢 מודיעין פיננסי ורגולטורי: {n_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker_html}</div></div>
     </div>
-    <div class="body-spacer"></div>
+    <div class="content-offset"></div>
     """, unsafe_allow_html=True)
 
 # --- 2. BACKEND & SIDEBAR ---
@@ -126,10 +120,9 @@ with st.sidebar:
     if not df.empty:
         s_comp = st.selectbox("בחר חברה:", sorted(df['display_name'].unique()), key="sb_c")
         comp_df = df[df['display_name'] == s_comp].sort_values(by=['year', 'quarter'], ascending=False)
-        available_quarters = comp_df['quarter'].unique()
-        if len(available_quarters) > 0:
-            s_q = st.selectbox("בחר רבעון:", available_quarters, key="sb_q")
-            d = comp_df[comp_df['quarter'] == s_q].iloc[0]
+        available_q = comp_df['quarter'].unique()
+        s_q = st.selectbox("בחר רבעון:", available_q, key="sb_q")
+        d = comp_df[comp_df['quarter'] == s_q].iloc[0]
         if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
     st.divider()
     st.file_uploader("📂 חלון גרירת PDF", type=['pdf'], key="pdf_up")
@@ -143,36 +136,37 @@ def render_kpi(label, value, formula, desc, note):
 if not df.empty and d is not None:
     st.title(f"{s_comp} | סקירה ניהולית {s_q}")
     
-    # 5 המדדים הקריטיים
     k_cols = st.columns(5)
     k_meta = [
         ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{OF}{SCR}", "חוסן הוני.", "יעד 150%."),
         ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום.", "IFRS 17."),
-        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "יעילות."),
-        ("Combined", f"{d['combined_ratio']}%", "CR", "חיתום.", "אלמנטרי."),
+        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "ניהול."),
+        ("Combined", f"{d['combined_ratio']}%", "CR", "חיתום אלמנטרי.", "רווחיות."),
         ("NB Margin", f"{d['new_biz_margin']}%", "Margin", "רווחיות מכירות.", "צמיחה.")
     ]
     for i in range(5):
         with k_cols[i]: render_kpi(*k_meta[i])
 
     st.divider()
-    t1, t2, t3, t4, t5 = st.tabs(["📉 מגמות", "🏛️ סולבנסי II", "📑 מגזרים IFRS 17", "⛈️ Stress Test", "🏁 השוואה"])
+    tabs = st.tabs(["📉 מגמות", "🏛️ סולבנסי II", "📑 מגזרים", "⛈️ Stress Test", "🏁 השוואה"])
 
-    with t1:
+    with tabs[0]:
         st.plotly_chart(px.line(comp_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         r_cols = st.columns(3)
-        with r_cols[0]: render_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "איכות חיתום.", "דגל אדום בעלייה.")
-        with r_cols[1]: render_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב הכרת רווח.", "שימור המחסן.")
+        with r_cols[0]: render_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "איכות חיתום.", "עלייה = סיכון.")
+        with r_cols[1]: render_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב רווח.", "שימור המחסן.")
         with r_cols[2]: render_kpi("תשואת השקעות", f"{d['inv_yield']}%", r"Yield", "ביצועי תיק.", "קריטי ליעדים.")
 
-    with t2:
+    with tabs[1]:
+        
         ca, cb = st.columns(2)
         with ca:
             f = go.Figure(data=[go.Bar(name='Tier 1', y=[d['tier1_cap']], marker_color='#3b82f6'), go.Bar(name='Tier 2/3', y=[d['own_funds']-d['tier1_cap']], marker_color='#334155')])
             f.update_layout(barmode='stack', template="plotly_dark", height=300, title="מבנה איכות ההון", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(f, use_container_width=True)
         with cb: st.plotly_chart(px.pie(names=['שוק', 'חיתום', 'תפעול'], values=[d['mkt_risk'], d['und_risk'], d['operational_risk']], hole=0.6, template="plotly_dark", height=300, title="סיכוני SCR").update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
-    with t3:
+    with tabs[2]:
+        
         st.write("### 📑 רווחיות (CSM) מול חוזים מפסידים (LC) לפי מגזר")
         sn = ['חיים', 'בריאות', 'כללי']
         f_seg = go.Figure(data=[
@@ -182,7 +176,7 @@ if not df.empty and d is not None:
         f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(f_seg, use_container_width=True)
 
-    with t4:
+    with tabs[3]:
         s1, s2, s3 = st.columns(3)
         with s1: ir_s = st.slider("ריבית", -100, 100, 0, key="irs")
         with s2: mk_s = st.slider("מניות", 0, 40, 0, key="mks")
@@ -191,8 +185,8 @@ if not df.empty and d is not None:
         proj = d['solvency_ratio'] - impact
         st.metric("סולבנסי חזוי", f"{proj:.1f}%", delta=f"{-impact:.1f}%", delta_color="inverse")
 
-    with t5:
-        pm = st.selectbox("בחר מדד להשוואה:", ['solvency_ratio', 'roe', 'inv_yield', 'csm_total'])
+    with tabs[4]:
+        pm = st.selectbox("בחר מדד:", ['solvency_ratio', 'roe', 'inv_yield', 'csm_total'])
         st.plotly_chart(px.bar(df[df['quarter']==s_q].sort_values(by=pm), x='display_name', y=pm, color='display_name', template="plotly_dark", height=300, text_auto=True).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 else:
     st.error("לא נמצא מחסן נתונים.")
