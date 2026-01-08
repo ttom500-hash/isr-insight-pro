@@ -4,3 +4,5 @@ plotly
 pdfplumber
 requests
 yfinance
+feedparser
+lxml
