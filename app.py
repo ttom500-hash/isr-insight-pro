@@ -16,7 +16,7 @@ def fetch_news_master(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36', 'Referer': 'https://www.google.com/'}
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as response: return feedparser.parse(response.read())
+        with urllib.request.urlopen(req, timeout=12) as response: return feedparser.parse(response.read())
     except: return None
 
 @st.cache_data(ttl=300)
@@ -35,12 +35,12 @@ def get_market_data():
                     parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({pct:+.2f}%)</span>')
             except: continue
         return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts)
-    except: return "סנכרון מדדי בורסה..."
+    except: return "סנכרון בורסה..."
 
 @st.cache_data(ttl=900)
 def get_news():
     feeds = [("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"), ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml"), ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml")]
-    keywords = ["ביטוח", "פנסיה", "סולבנסי", "רגולציה", "הראל", "הפניקס", "מגדל", "כלל", "מנורה"]
+    keywords = ["ביטוח", "סולבנסי", "רגולציה", "הראל", "הפניקס", "מגדל", "כלל", "מנורה"]
     news_items = []
     seen = set()
     for src, url in feeds:
@@ -62,15 +62,15 @@ st.markdown(f"""
     .ticker-anchor {{ position: sticky; top: -1px; width: 100%; z-index: 999; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }}
     .m-strip {{ background-color: #000000; padding: 12px 20px; border-bottom: 1px solid #334155; overflow: hidden; white-space: nowrap; }}
     .n-strip {{ background-color: #450a0a; padding: 8px 20px; border-bottom: 2px solid #7a1a1c; overflow: hidden; white-space: nowrap; }}
-    .scroll-v89 {{ display: inline-block; padding-right: 100%; animation: tRunV89 110s linear infinite; font-family: sans-serif; font-size: 0.94rem; color: #ffffff !important; }}
-    @keyframes tRunV89 {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
+    .scroll {{ display: inline-block; padding-right: 100%; animation: tRun 120s linear infinite; font-family: sans-serif; font-size: 0.94rem; color: #ffffff !important; }}
+    @keyframes tRun {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
     [data-testid="stSidebar"] {{ background-color: #1e293b !important; border-left: 1px solid #334155; }}
     div[data-testid="stMetric"] {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 12px !important; }}
     div[data-testid="stMetricValue"] {{ color: #3b82f6 !important; font-weight: 700 !important; }}
     </style>
     <div class="ticker-anchor">
-        <div class="m-strip"><div class="scroll-v89">{m_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_html}</div></div>
-        <div class="n-strip"><div class="scroll-v89">📢 מודיעין רגולטורי (v89 SUPREME): {n_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_html}</div></div>
+        <div class="m-strip"><div class="scroll">{m_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_html}</div></div>
+        <div class="n-strip"><div class="scroll">📢 מבזקי רגולציה וחדשות (v90 MASTER): {n_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_html}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -83,8 +83,8 @@ def validate_data_integrity(extracted_dict):
     else: reports.append({"status": "success", "msg": "✅ אימות הוני: יחס הסולבנסי תקין מול מרכיבי המאזן."})
     sum_csm = extracted_dict['life_csm'] + extracted_dict['health_csm'] + extracted_dict['general_csm']
     if abs(sum_csm - extracted_dict['csm_total']) > 0.2:
-        reports.append({"status": "error", "msg": f"❌ שגיאת CSM: סכום המגזרים לא תואם ל-CSM המאוחד."})
-    else: reports.append({"status": "success", "msg": "✅ אימות IFRS 17: הפירוט המגזרי תקין."})
+        reports.append({"status": "error", "msg": f"❌ שגיאת CSM: סכום המגזרים לא תואם למאוחד."})
+    else: reports.append({"status": "success", "msg": "✅ אימות IFRS 17: פירוט מגזרי תקין."})
     return reports
 
 # --- 3. BACKEND & SIDEBAR ---
@@ -111,9 +111,9 @@ with st.sidebar:
     st.markdown("<h1 style='color:#3b82f6;'>🛡️ APEX PRO</h1>", unsafe_allow_html=True)
     st.divider()
     if not df.empty:
-        s_comp = st.selectbox("בחר חברה:", sorted(df['display_name'].unique()), key="sb_c_v89")
+        s_comp = st.selectbox("בחר חברה:", sorted(df['display_name'].unique()), key="sb_c_v90")
         comp_df = df[df['display_name'] == s_comp].sort_values(by=['year', 'quarter'], ascending=False)
-        s_q = st.selectbox("בחר רבעון:", comp_df['quarter'].unique(), key="sb_q_v89")
+        s_q = st.selectbox("בחר רבעון:", comp_df['quarter'].unique(), key="sb_q_v90")
         d = comp_df[comp_df['quarter'] == s_q].iloc[0]
         if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
     st.divider()
@@ -127,7 +127,7 @@ with st.sidebar:
 if not df.empty and d is not None:
     st.title(f"{s_comp} | סקירה ניהולית {s_q}")
     
-    # 5 המדדים הראשיים (שוחזר במלואה - v81 content)
+    # 5 המדדים הראשיים (v81 content)
     k_cols = st.columns(5)
     k_meta = [
         ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"Ratio = \frac{Own \ Funds}{SCR}", 
@@ -145,9 +145,9 @@ if not df.empty and d is not None:
         with k_cols[i]: render_master_kpi(*k_meta[i])
 
     st.divider()
-    tabs = st.tabs(["📉 מגמות ויחסים", "🏛️ סולבנסי II", "📑 מגזרים IFRS 17", "⛈️ Stress Test", "🏁 השוואה ענפית"])
+    tabs = st.tabs(["📉 מגמות ויחסים", "🏛️ סולבנסי II - עומק", "📑 מגזרים IFRS 17 - עומק", "⛈️ Stress Test", "🏁 השוואה ענפית"])
 
-    with tabs[0]: # 6 יחסים משלימים (שחזור מלא)
+    with tabs[0]: # 6 יחסים משלימים
         st.plotly_chart(px.line(comp_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         r1, r2 = st.columns(3), st.columns(3)
         with r1[0]: render_master_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "איכות חיתום.", "70%-80%.", "בחינה של הרעה בטיפול בתביעות.")
@@ -157,48 +157,70 @@ if not df.empty and d is not None:
         with r2[1]: render_master_kpi("הון לנכסים", f"{d['equity_to_assets']}%", r"Ratio", "מינוף וחוסן מאזני.", "8%-12% טווח בטוח.", "יחס נמוך = מינוף גבוה וסיכון ליציבות.")
         with r2[2]: render_master_kpi("תזרים מפעילות", f"{d['op_cash_flow_ratio']}%", r"CFO/NI", "איכות הרווח.", "1.0 אופטימלי.", "נמוך מ-0.7 = 'רווחי נייר'.")
 
-    with tabs[1]: # סולבנסי II עומק (v82 Restore)
-        st.write("### 🏛️ ניתוח הון ודרישות SCR")
-        c_s1, c_s2 = st.columns(2)
+    with tabs[1]: # סולבנסי II עומק (v90 RECONSTRUCTED)
+        
+        st.write("### 🏛️ ניתוח הון ודרישות SCR (Detailed Audit)")
+        c_s1, c_s2 = st.columns([2, 1])
         with c_s1:
             risk_d = pd.DataFrame({'מודול': ['שוק', 'חיתום חיים', 'חיתום בריאות', 'חיתום כללי', 'תפעול'], 'דרישה': [d['mkt_risk'], d['und_risk']*0.4, d['und_risk']*0.3, d['und_risk']*0.3, d['operational_risk']]})
-            st.plotly_chart(px.bar(risk_d, x='דרישה', y='מודול', orientation='h', template="plotly_dark", height=300, color='מודול').update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+            st.plotly_chart(px.bar(risk_d, x='דרישה', y='מודול', orientation='h', template="plotly_dark", height=320, color='מודול').update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         with c_s2:
             st.metric("הון עצמי (Own Funds)", f"₪{d['own_funds']:.2f}B")
-            st.info(f"עודף הון לדיבידנד (150%): ₪{max(0, d['own_funds'] - d['scr_amount']*1.5):.2f}B")
+            st.metric("דרישת SCR", f"₪{d['scr_amount']:.2f}B")
+            eligible_ratio = (d['tier1_cap'] / d['scr_amount']) * 100
+            st.metric("איכות הון (Tier 1/SCR)", f"{eligible_ratio:.1f}%", help="הנחיית המפקח: מינימום 50%.")
+            st.info(f"מרווח חלוקה: ₪{max(0, d['own_funds'] - d['scr_amount']*1.5):.2f}B")
 
-    with tabs[2]: # IFRS 17 עומק (v83 Restore)
+        st.divider()
+        st.write("**📑 דגשי פיקוח - סולבנסי:**")
+        st.write("* **אפקט הפיזור:** החברה נהנית מהפחתת דרישת הון בגין פיזור בין מגזרי חיתום שונים.")
+        st.write("* **הון Tier 1:** מורכב בעיקר מהון מניות ורווחים שנצברו, מהווה את כרית הביטחון האיכותית ביותר.")
+
+    with tabs[2]: # IFRS 17 עומק (v90 RECONSTRUCTED)
         
         st.write("### 📑 ניתוח רווחיות מגזרית ותנועת CSM")
         ci1, ci2 = st.columns([2, 1])
         with ci1:
-            f_seg = go.Figure(data=[go.Bar(name='CSM', x=['חיים', 'בריאות', 'כללי'], y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'), go.Bar(name='LC', x=['חיים', 'בריאות', 'כללי'], y=[d['life_lc'], d['health_lc'], d['general_lc']], marker_color='#f87171')])
-            f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(f_seg, use_container_width=True)
+            sn = ['חיים', 'בריאות', 'כללי']
+            f_seg = go.Figure(data=[
+                go.Bar(name='CSM (רווח גלום)', x=sn, y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'),
+                go.Bar(name='Loss Component (הפסד מיידי)', x=sn, y=[d['life_lc'], d['health_lc'], d['general_lc']], marker_color='#f87171')
+            ])
+            f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(f_seg, use_container_width=True)
         with ci2:
-            wf = go.Figure(go.Waterfall(name="CSM Movement", orientation="v", measure=["relative", "relative", "relative", "total"], x=["פתיחה", "מכירות", "שחרור", "סגירה"], y=[d['csm_total']*0.9, d['csm_total']*0.15, -d['csm_total']*0.05, d['csm_total']], increasing={"marker":{"color":"#3b82f6"}}, decreasing={"marker":{"color":"#f87171"}}))
-            wf.update_layout(template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(wf, use_container_width=True)
+            st.write("**מרווחי NB מגזריים**")
+            m_data = pd.DataFrame({'מגזר': sn, 'מרווח (%)': [d['new_biz_margin']*1.1, d['new_biz_margin']*1.4, d['new_biz_margin']*0.6]})
+            st.plotly_chart(px.bar(m_data, x='מגזר', y='מרווח (%)', color='מגזר', template="plotly_dark", height=320).update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        
+        st.divider()
+        st.write("**📈 ניתוח תנועת ה-CSM המאוחד (Waterfall)**")
+        wf = go.Figure(go.Waterfall(
+            name="CSM Movement", orientation="v", measure=["relative", "relative", "relative", "total"],
+            x=["פתיחה", "מכירות (NB)", "שחרור/התאמות", "סגירה"],
+            y=[d['csm_total']*0.9, d['csm_total']*0.15, -d['csm_total']*0.05, d['csm_total']],
+            increasing={"marker":{"color":"#3b82f6"}}, decreasing={"marker":{"color":"#f87171"}}
+        ))
+        wf.update_layout(template="plotly_dark", height=380, paper_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(wf, use_container_width=True)
+        
+        st.info("💡 Insurance Service Result: המדד משקף את הרווח התפעולי הביטוחי לפני השפעות שוק ההון.")
 
-    with tabs[3]: # Stress Test עומק (v85-86 Restore)
+    with tabs[3]: # Stress Test
         
         st.write("### ⛈️ סימולטור תרחישי קיצון משולב")
         sc1, sc2, sc3 = st.columns(3)
         with sc1:
             eq_s = st.slider("קריסת מניות (%)", 0, 50, 0, key="st_eq")
-            with st.expander("❓ הסבר"): st.write("ירידה בערך הנכסים המוחזקים בתיק המשתתף והנוסטרו.")
         with sc2:
             ir_s = st.slider("שינוי ריבית (bps)", -150, 150, 0, key="st_ir")
-            with st.expander("❓ הסבר"): st.write("שינוי בשיעור ההיוון המשפיע על התחייבויות ארוכות טווח (BEL).")
         with sc3:
             cr_s = st.slider("מרווחי אשראי (bps)", 0, 300, 0, key="st_cr")
-            with st.expander("❓ הסבר"): st.write("הרחבת מרווחים באג\"ח קונצרני המורידה את ערך תיק האג\"ח.")
 
         sc4, sc5 = st.columns(2)
         with sc4:
             lp_s = st.slider("ביטולים המוניים (Mass Lapse %)", 0, 40, 0, key="st_lp")
-            with st.expander("❓ הסבר"): st.write("תרחיש 'ריצה על הקופה' המאיים על הנזילות וה-CSM.")
         with sc5:
             mo_s = st.slider("עלייה בתביעות בריאות (%)", 0, 30, 0, key="st_mo")
-            with st.expander("❓ הסבר"): st.write("הרעה בשיעור התחלואה/תביעות במגזר הבריאות/סיעוד.")
 
         total_imp = (eq_s * d['mkt_sens']) + (ir_s/100 * d['int_sens']) + (lp_s * d['lapse_sens']) + (cr_s/10 * 0.1)
         final_solv = d['solvency_ratio'] - total_imp
@@ -214,36 +236,22 @@ if not df.empty and d is not None:
             f_g.update_layout(height=280, margin=dict(t=0, b=0), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
             st.plotly_chart(f_g, use_container_width=True)
 
-    with tabs[4]: # Peer Analysis עומק (v87-88 Restore)
-        st.write("### 🏁 ניתוח Peer Analysis - רבעון {s_q}")
+    with tabs[4]: # Peer Analysis
+        
+        st.write(f"### 🏁 ניתוח Peer Analysis - רבעון {s_q}")
         q_df = df[df['quarter'] == s_q].copy()
         
-        # Matrix
         st.markdown("#### א. מטריצת ביצועים ענפית")
         m_c = ['display_name', 'solvency_ratio', 'roe', 'combined_ratio', 'expense_ratio', 'csm_total']
         m_df = q_df[m_c].rename(columns={'display_name': 'חברה', 'solvency_ratio': 'סולבנסי (%)', 'roe': 'ROE (%)', 'combined_ratio': 'Combined (%)', 'expense_ratio': 'הוצאות (%)', 'csm_total': 'CSM (B)'})
-        try:
-            st.dataframe(m_df.style.background_gradient(cmap='Blues', subset=['ROE (%)', 'CSM (B)']).background_gradient(cmap='Reds', subset=['הוצאות (%)', 'Combined (%)']), use_container_width=True)
-        except: st.dataframe(m_df, use_container_width=True)
+        st.dataframe(m_df, use_container_width=True)
 
         st.divider()
-        # Efficiency Frontier
         st.markdown("#### ב. יעילות מול חוסן (Efficiency Frontier)")
-        
         fig_scatter = px.scatter(q_df, x="solvency_ratio", y="roe", size="csm_total", color="display_name", hover_name="display_name", template="plotly_dark")
         fig_scatter.add_hline(y=q_df['roe'].mean(), line_dash="dash", annotation_text="ממוצע ROE")
         fig_scatter.add_vline(x=150, line_dash="dot", annotation_text="רף 150%")
         fig_scatter.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_scatter, use_container_width=True)
-
-        st.divider()
-        # Peer Average Bar
-        met_choice = st.selectbox("בחר מדד לדירוג:", ['solvency_ratio', 'roe', 'csm_total', 'combined_ratio', 'expense_ratio'], key="peer_v89")
-        b_df = q_df.sort_values(by=met_choice, ascending=False)
-        avg_v = b_df[met_choice].mean()
-        f_bar = px.bar(b_df, x='display_name', y=met_choice, color='display_name', text_auto='.1f', template="plotly_dark", height=380)
-        f_bar.add_hline(y=avg_v, line_color="white", line_dash="dash", annotation_text=f"ממוצע: {avg_v:.1f}")
-        f_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False)
-        st.plotly_chart(f_bar, use_container_width=True)
 else:
     st.error("לא נמצא מחסן נתונים.")
