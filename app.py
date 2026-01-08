@@ -5,8 +5,9 @@ import plotly.graph_objects as go
 import yfinance as yf
 import feedparser
 import os
+from datetime import datetime, timedelta
 
-# --- 1. הגדרות מערכת ועיצוב EXECUTIVE (v66.0) ---
+# --- 1. הגדרות מערכת ועיצוב EXECUTIVE (v67.0) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
 # פונקציית מדדי שוק (בורסה, מט"ח, ריבית) - משיכה חסינה
@@ -20,89 +21,103 @@ def get_market_data():
     try:
         for sym, name in tickers.items():
             try:
-                t = yf.Ticker(sym)
-                hist = t.history(period="2d")
-                if not hist.empty:
-                    val, prev = hist['Close'].iloc[-1], hist['Close'].iloc[-2]
+                # שימוש ב-download מהיר
+                data = yf.download(sym, period="5d", interval="1d", progress=False)
+                if not data.empty:
+                    val = data['Close'].iloc[-1]
+                    prev = data['Close'].iloc[-2]
                     pct = ((val / prev) - 1) * 100
                     clr = "#4ade80" if pct >= 0 else "#f87171"
                     arr = "▲" if pct >= 0 else "▼"
                     parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({arr}{pct:.2f}%)</span>')
             except: continue
-        return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדי שוק..."
-    except: return "מתחבר לנתונים..."
+        return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts) if parts else "טוען מדדי שוק אונליין..."
+    except: return "מתחבר לבורסה..."
 
-# מנוע מבזקים רגולטורי (סריקת עומק שבועית)
-@st.cache_data(ttl=900)
-def get_regulatory_news():
+# מנוע מבזקים חכם - סריקת עומק שבועית (Backfill)
+@st.cache_data(ttl=600)
+def get_smart_news():
     feeds = [
         ("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"),
         ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml"),
         ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml")
     ]
-    keywords = ["ביטוח", "פנסיה", "גמל", "סולבנסי", "ריבית", "אינפלציה", "שוק ההון", "אג\"ח", "חיתום", "CSM", "IFRS", "דיבידנד", "רגולציה", "רשות שוק ההון", "הפניקס", "הראל", "מגדל", "כלל", "מנורה"]
+    keywords = ["ביטוח", "פנסיה", "גמל", "סולבנסי", "ריבית", "אינפלציה", "שוק ההון", "אג\"ח", "IFRS", "דיבידנד", "רגולציה", "רשות שוק ההון", "הפניקס", "הראל", "מגדל", "כלל", "מנורה"]
     news_items = []
     seen = set()
+    
     for src, url in feeds:
         try:
             f = feedparser.parse(url)
-            for entry in f.entries[:40]:
-                if any(k in entry.title for k in keywords) and entry.title not in seen:
-                    news_items.append(f"🚩 {src}: {entry.title}")
-                    seen.add(entry.title)
+            # סריקת עד 100 ידיעות אחרונות להבטחת חדשות מהשבוע האחרון
+            for entry in f.entries[:100]:
+                title = entry.title
+                if any(k in title for k in keywords) and title not in seen:
+                    news_items.append(f"🚩 {src}: {title}")
+                    seen.add(title)
         except: continue
+        
+    # במידה ואין מספיק חדשות ביטוח, נמלא בחדשות מאקרו חשובות
+    if len(news_items) < 5:
+        for src, url in feeds:
+            try:
+                f = feedparser.parse(url)
+                for entry in f.entries[:10]:
+                    if entry.title not in seen:
+                        news_items.append(f"🌐 {src}: {entry.title}")
+            except: continue
+            
     return " &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; ".join(news_items) if news_items else "סורק פרסומים רגולטוריים..."
 
 m_ticker_html = get_market_data()
-n_ticker_html = get_regulatory_news()
+n_ticker_html = get_smart_news()
 
-# CSS - פתרון בעיית ההסתרה של המדדים
+# CSS - תיקון הסטה לימין (עבור עברית) וZ-Index
 st.markdown(f"""
     <style>
-    /* רקע האפליקציה */
     .stApp {{ background-color: #0f172a !important; }}
     
-    /* קונטיינר הסרגלים - מוסט שמאלה כדי לא להסתתר תחת ה-Sidebar */
-    .ticker-header {{
+    /* קונטיינר הסרגלים - מוסט שמאלה כדי שלא ייבלע ב-Sidebar הימני */
+    .ticker-fixed-container {{
         position: fixed; top: 0; left: 0; 
-        width: calc(100% - 21rem); /* 21rem הוא רוחב ה-Sidebar הסטנדרטי */
-        z-index: 9999;
+        width: 100%; /* נשתמש ברוחב מלא עם פדינג פנימי */
+        z-index: 99999;
     }}
     
-    /* סרגל בורסה - שחור פחם */
     .m-strip {{
-        background-color: #000000; padding: 12px 0; border-bottom: 1px solid #334155;
+        background-color: #000000; padding: 12px 2rem; border-bottom: 1px solid #334155;
         overflow: hidden; white-space: nowrap;
     }}
     
-    /* סרגל חדשות - בורדו */
     .n-strip {{
-        background-color: #450a0a; padding: 7px 0; border-bottom: 2px solid #7a1a1c;
+        background-color: #450a0a; padding: 7px 2rem; border-bottom: 2px solid #7a1a1c;
         overflow: hidden; white-space: nowrap;
     }}
     
     .scroll-content {{
-        display: inline-block; padding-right: 100%; animation: tickerMove 75s linear infinite;
+        display: inline-block; padding-right: 100%; animation: tScroll 80s linear infinite;
         font-family: sans-serif; font-size: 0.92rem; color: #ffffff !important;
     }}
-    @keyframes tickerMove {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
+    @keyframes tScroll {{ 0% {{ transform: translateX(0); }} 100% {{ transform: translateX(-100%); }} }}
     
-    /* מרווח לתוכן המרכזי */
-    .content-offset {{ margin-top: 130px; }}
+    .spacer-top {{ margin-top: 130px; }}
 
     /* Sidebar - חלון החיפוש */
-    [data-testid="stSidebar"] {{ background-color: #1e293b !important; z-index: 10000 !important; border-left: 1px solid #334155; }}
+    [data-testid="stSidebar"] {{ 
+        background-color: #1e293b !important; 
+        z-index: 1000000 !important; /* גבוה יותר מהסרגלים */
+    }}
     
-    /* מדדים והסברים */
-    div[data-testid="stMetric"] {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; }}
+    /* עיצוב מדדים */
+    div[data-testid="stMetric"] {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 10px !important; }}
     div[data-testid="stMetricValue"] {{ color: #3b82f6 !important; font-weight: 700 !important; }}
     </style>
     
-    <div class="ticker-header">
+    <div class="ticker-fixed-container">
         <div class="m-strip"><div class="scroll-content">{m_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_ticker_html}</div></div>
-        <div class="n-strip"><div class="scroll-content">📢 מודיעין פיננסי ורגולטורי: {n_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker_html}</div></div>
+        <div class="n-strip"><div class="scroll-content">📢 מבזקי רגולציה ושוק (עדכוני שבוע): {n_ticker_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_ticker_html}</div></div>
     </div>
-    <div class="content-offset"></div>
+    <div class="spacer-top"></div>
     """, unsafe_allow_html=True)
 
 # --- 2. BACKEND & SIDEBAR ---
@@ -143,9 +158,9 @@ if not df.empty and d is not None:
     
     k_cols = st.columns(5)
     k_meta = [
-        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"\frac{OF}{SCR}", "חוסן הוני.", "יעד 150%."),
-        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום.", "IFRS 17."),
-        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "ניהול."),
+        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"Ratio = \frac{Own \ Funds}{SCR}", "חוסן הוני.", "יעד 150%."),
+        ("יתרת CSM", f"₪{d['csm_total']}B", "CSM", "רווח עתידי גלום (IFRS 17).", "מחסן הרווחים."),
+        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "יעילות."),
         ("Combined", f"{d['combined_ratio']}%", "CR", "חיתום אלמנטרי.", "רווחיות."),
         ("NB Margin", f"{d['new_biz_margin']}%", "Margin", "רווחיות מכירות.", "צמיחה.")
     ]
@@ -158,12 +173,11 @@ if not df.empty and d is not None:
     with tabs[0]:
         st.plotly_chart(px.line(comp_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         r_cols = st.columns(3)
-        with r_cols[0]: render_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "איכות חיתום.", "עלייה = סיכון.")
-        with r_cols[1]: render_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב רווח.", "שימור המחסן.")
+        with r_cols[0]: render_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "אימות חיתום.", "דגל אדום בעלייה.")
+        with r_cols[1]: render_kpi("שחרור CSM", f"{d['csm_release_rate']}%", r"Rel", "קצב הכרת רווח.", "שימור המחסן.")
         with r_cols[2]: render_kpi("תשואת השקעות", f"{d['inv_yield']}%", r"Yield", "ביצועי תיק.", "קריטי ליעדים.")
 
     with tabs[1]:
-        
         ca, cb = st.columns(2)
         with ca:
             f = go.Figure(data=[go.Bar(name='Tier 1', y=[d['tier1_cap']], marker_color='#3b82f6'), go.Bar(name='Tier 2/3', y=[d['own_funds']-d['tier1_cap']], marker_color='#334155')])
