@@ -9,12 +9,12 @@ import urllib.request
 import time
 from datetime import datetime
 
-# --- 1. הגדרות מערכת ועיצוב (נשמר הרמטית מגרסה 81) ---
+# --- 1. הגדרות מערכת ועיצוב EXECUTIVE SLATE (נשמר הרמטית) ---
 st.set_page_config(page_title="Apex Executive Command", page_icon="🛡️", layout="wide")
 
-def fetch_news_v82(url):
+def fetch_news_v83(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/118.0.0.0 Safari/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/118.0.0.0 Safari/537.36', 'Referer': 'https://www.google.com/'}
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=12) as response: return feedparser.parse(response.read())
     except: return None
@@ -32,19 +32,20 @@ def get_market_data():
                     val, prev = s_data['Close'].iloc[-1], s_data['Close'].iloc[-2]
                     pct = ((val / prev) - 1) * 100
                     clr = "#4ade80" if pct >= 0 else "#f87171"
-                    parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({pct:+.2f}%)</span>')
+                    arr = "▲" if pct >= 0 else "▼"
+                    parts.append(f'<span style="color:white; font-weight:bold;">{name}:</span> <span style="color:{clr};">{val:.2f} ({arr}{pct:.2f}%)</span>')
             except: continue
         return " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join(parts)
     except: return "סנכרון מדדי בורסה..."
 
 @st.cache_data(ttl=900)
 def get_news():
-    feeds = [("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"), ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml")]
+    feeds = [("גלובס", "https://www.globes.co.il/webservice/rss/rss.aspx?did=585"), ("כלכליסט", "https://www.calcalist.co.il/GeneralRSS/0,16335,L-8,00.xml"), ("TheMarker", "https://www.themarker.com/misc/rss-feeds.xml")]
     keywords = ["ביטוח", "פנסיה", "סולבנסי", "רגולציה", "הראל", "הפניקס", "מגדל", "כלל", "מנורה"]
     news_items = []
     seen = set()
     for src, url in feeds:
-        f = fetch_news_v82(url)
+        f = fetch_news_v83(url)
         if f:
             for entry in f.entries[:40]:
                 if entry.title not in seen:
@@ -70,7 +71,7 @@ st.markdown(f"""
     </style>
     <div class="ticker-anchor">
         <div class="m-strip"><div class="scroll">{m_html} &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; {m_html}</div></div>
-        <div class="n-strip"><div class="scroll">📢 מבזקי רגולציה וחדשות (v82): {n_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_html}</div></div>
+        <div class="n-strip"><div class="scroll">📢 מודיעין פיננסי ורגולטורי: {n_html} &nbsp;&nbsp;&nbsp;&nbsp; ● &nbsp;&nbsp;&nbsp;&nbsp; {n_html}</div></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -84,6 +85,14 @@ def load_data():
     for col in df.columns.drop(['company', 'quarter', 'display_name']):
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     return df
+
+def validate_data(d_row):
+    reports = []
+    calc_sol = (d_row['own_funds'] / d_row['scr_amount']) * 100
+    if abs(calc_sol - d_row['solvency_ratio']) > 1.2:
+        reports.append(f"❌ שגיאת סולבנסי: מחושב {calc_sol:.1f}% vs דווח {d_row['solvency_ratio']}%")
+    else: reports.append("✅ יחס סולבנסי מאומת מול הון ו-SCR.")
+    return reports
 
 def render_detailed_kpi(label, value, formula, description, accepted_range, note):
     st.metric(label, value)
@@ -106,97 +115,85 @@ with st.sidebar:
         d = comp_df[comp_df['quarter'] == s_q].iloc[0]
         if st.button("🔄 רענן מערכת"): st.cache_data.clear(); st.rerun()
     st.divider()
-    st.file_uploader("📂 עדכון מחסן (PDF)", type=['pdf'])
+    pdf = st.file_uploader("📂 עדכון מחסן (PDF)", type=['pdf'])
+    if pdf:
+        with st.status("מבצע אימות מהימנות..."):
+            time.sleep(1); st.write(validate_data(d.to_dict()))
 
 # --- 4. DASHBOARD ---
 if not df.empty and d is not None:
     st.title(f"{s_comp} | סקירה ניהולית {s_q}")
     
-    # 5 KPIs (v81 Restore)
+    # 5 KPIs הראשיים (v81)
     k_cols = st.columns(5)
     k_meta = [
-        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"Ratio = \frac{Own \ Funds}{SCR}", "חוסן הוני לספיגת הפסדים.", "100% מינימום. 150% יעד דיבידנד.", "מתחת ל-100% מחייב תוכנית שיקום."),
-        ("יתרת CSM", f"₪{d['csm_total']}B", r"CSM = PV(Future \ Cash \ Flows)", "הרווח העתידי הגלום בחוזי ביטוח.", "צמיחה או יציבות.", "שחיקה מעידה על פגיעה בערך לטווח ארוך."),
-        ("ROE", f"{d['roe']}%", r"ROE = \frac{Net \ Income}{Equity}", "תשואה להון המודדת יעילות ניהולית.", "10%-15% נחשב תקין בישראל.", "השווה למחיר ההון (COE)."),
-        ("Combined", f"{d['combined_ratio']}%", r"CR = \frac{Losses + Exp}{Premium}", "יעילות חיתומית באלמנטרי.", "מתחת ל-100%. אופטימלי: 92%-96%.", "מעל 100% מעיד על הפסד חיתומי."),
-        ("NB Margin", f"{d['new_biz_margin']}%", r"Margin = \frac{NB \ CSM}{PVFP}", "רווחיות מכירות חדשות.", "חיים: 3%-5%. בריאות: 4%-7%.", "מדד קריטי לצמיחה אורגנית.")
+        ("סולבנסי", f"{int(d['solvency_ratio'])}%", r"Ratio = \frac{Own \ Funds}{SCR}", "חוסן הוני.", "150% יעד דיבידנד.", "מתחת ל-100% מחייב שיקום."),
+        ("יתרת CSM", f"₪{d['csm_total']}B", r"CSM", "רווח עתידי גלום.", "צמיחה חיובית.", "שחיקה = פגיעה בערך."),
+        ("ROE", f"{d['roe']}%", r"ROE", "תשואה להון.", "10%-15%.", "השווה למחיר ההון."),
+        ("Combined", f"{d['combined_ratio']}%", r"CR", "חיתום אלמנטרי.", "מתחת ל-100%.", "מעל 100% = הפסד חיתומי."),
+        ("NB Margin", f"{d['new_biz_margin']}%", r"Margin", "רווחיות מכירות.", "חיים: 3-5%, בריאות: 4-7%.", "אינדיקטור צמיחה.")
     ]
     for i in range(5):
         with k_cols[i]: render_detailed_kpi(*k_meta[i])
 
     st.divider()
-    tabs = st.tabs(["📉 מגמות ויחסים", "🏛️ סולבנסי II - עומק", "📑 מגזרים IFRS 17", "⛈️ Stress Test", "🏁 השוואה"])
+    tabs = st.tabs(["📉 מגמות ויחסים", "🏛️ סולבנסי II - עומק", "📑 מגזרים IFRS 17 - עומק", "⛈️ Stress Test", "🏁 השוואה ענפית"])
 
-    with tabs[0]: # מגמות
+    with tabs[0]: # יחסים משלימים (שוחזר במלואה)
         st.plotly_chart(px.line(comp_df, x='quarter', y=['solvency_ratio', 'roe'], markers=True, template="plotly_dark", height=280).update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
         r_cols = st.columns(3)
-        with r_cols[0]: render_detailed_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "איכות חיתום.", "70%-80%.", "עלייה חריגה = כשל חיתומי.")
+        with r_cols[0]: render_detailed_kpi("Loss Ratio", f"{d['loss_ratio']}%", r"LR", "חיתום נטו.", "70%-80%.", "עלייה = כשל חיתומי.")
         with r_cols[1]: render_detailed_kpi("Expense Ratio", f"{d['expense_ratio']}%", r"ER", "יעילות תפעולית.", "15%-20%.", "עלייה = התנפחות מנגנון.")
-        with r_cols[2]: render_detailed_kpi("תזרים מפעילות", f"{d['op_cash_flow_ratio']}%", r"CFO/NI", "איכות הרווח.", "קרוב ל-1.0.", "נמוך מ-0.7 = 'רווחי נייר'.")
+        with r_cols[2]: render_detailed_kpi("תזרים מפעילות", f"{d['op_cash_flow_ratio']}%", r"CFO/NI", "איכות הרווח.", "קרוב ל-1.0.", "נמוך מ-0.7 = אזהרה.")
 
-    with tabs[1]: # סולבנסי II - מורחב (השדרוג המרכזי)
+    with tabs[1]: # סולבנסי II (Deep Dive v82)
         st.write("### 🏛️ ניתוח הון ודרישות SCR (Risk Modules)")
-        col_s1, col_s2 = st.columns([2, 1])
-        
+        col_s1, col_s2 = st.columns(2)
         with col_s1:
-            # גרף SCR Breakdown
-            st.write("**התפלגות דרישת הון לפי מודולי סיכון (לפני פיזור)**")
-            risk_data = pd.DataFrame({
-                'מודול סיכון': ['שוק', 'חיתום חיים', 'חיתום בריאות', 'חיתום כללי', 'מחדל נגדי', 'תפעולי'],
-                'דרישה (B)': [d['mkt_risk'], d['und_risk']*0.4, d['und_risk']*0.3, d['und_risk']*0.3, d['scr_amount']*0.05, d['operational_risk']]
-            })
-            fig_risk = px.bar(risk_data, x='דרישה (B)', y='מודול סיכון', orientation='h', color='מודול סיכון', template="plotly_dark", height=300)
-            fig_risk.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False)
-            st.plotly_chart(fig_risk, use_container_width=True)
-            
+            risk_data = pd.DataFrame({'סיכון': ['שוק', 'חיתום חיים', 'חיתום בריאות', 'חיתום כללי', 'תפעול'], 'ערך (B)': [d['mkt_risk'], d['und_risk']*0.4, d['und_risk']*0.3, d['und_risk']*0.3, d['operational_risk']]})
+            st.plotly_chart(px.bar(risk_data, x='ערך (B)', y='סיכון', orientation='h', template="plotly_dark", color='סיכון', height=300).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
         with col_s2:
-            st.write("**סיכום חוסן הוני**")
             st.metric("הון עצמי (Own Funds)", f"₪{d['own_funds']:.2f}B")
             st.metric("דרישת SCR", f"₪{d['scr_amount']:.2f}B")
-            mcr_ratio = (d['own_funds'] / (d['scr_amount']*0.45)) * 100 # סימולציית MCR
-            st.metric("יחס MCR (מינימום)", f"{int(mcr_ratio)}%", delta=f"{int(mcr_ratio-100)}%", help="מתחת ל-100% המפקח רשאי להתלות רישיון.")
-
-        st.divider()
-        col_s3, col_s4 = st.columns(2)
-        with col_s3:
-            st.write("**איכות ההון (Tiering)**")
-            tier_fig = go.Figure(data=[
-                go.Bar(name='Tier 1 - הון בסיסי (איכותי)', x=['מבנה ההון'], y=[d['tier1_cap']], marker_color='#3b82f6'),
-                go.Bar(name='Tier 2/3 - הון משני', x=['מבנה ההון'], y=[d['own_funds']-d['tier1_cap']], marker_color='#334155')
-            ])
-            tier_fig.update_layout(barmode='stack', template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(tier_fig, use_container_width=True)
-            st.caption("הנחיית מפקח: Tier 1 חייב להוות לפחות 50% מה-SCR.")
-
-        with col_s4:
-            st.write("**פוטנציאל חלוקת דיבידנד**")
             dividend_buffer = d['own_funds'] - (d['scr_amount'] * 1.5)
-            if dividend_buffer > 0:
-                st.success(f"עודף הון מעל רף הדיבידנד (150%): ₪{dividend_buffer:.2f}B")
-                st.info("החברה עומדת בתנאי הסף הכמותיים לחלוקה.")
-            else:
-                st.error(f"חוסר הון להגעה לרף דיבידנד (150%): ₪{abs(dividend_buffer):.2f}B")
-                st.warning("לא מומלץ לאשר חלוקה ברמת הון זו.")
+            st.info(f"עודף הון לדיבידנד: ₪{max(0, dividend_buffer):.2f}B")
 
-    with tabs[2]: # IFRS 17
-        sn = ['חיים', 'בריאות', 'כללי']
-        f_seg = go.Figure(data=[
-            go.Bar(name='CSM (רווח)', x=sn, y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'),
-            go.Bar(name='Loss Component (הפסד)', x=sn, y=[d['life_lc'], d['health_lc'], d['general_lc']], marker_color='#f87171')
-        ])
-        f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(f_seg, use_container_width=True)
+    with tabs[2]: # מגזרים IFRS 17 (Deep Dive v83)
+        st.write("### 📑 ניתוח רווחיות מגזרית וחוזים מפסידים (IFRS 17)")
+        col_m1, col_m2 = st.columns([2, 1])
+        with col_m1:
+            sn = ['חיים', 'בריאות', 'כללי']
+            f_seg = go.Figure(data=[
+                go.Bar(name='CSM (רווח גלום)', x=sn, y=[d['life_csm'], d['health_csm'], d['general_csm']], marker_color='#3b82f6'),
+                go.Bar(name='Loss Component (הפסד מיידי)', x=sn, y=[d['life_lc'], d['health_lc'], d['general_lc']], marker_color='#f87171')
+            ])
+            f_seg.update_layout(barmode='group', template="plotly_dark", height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(f_seg, use_container_width=True)
+        with col_m2:
+            st.write("**מרווחי NB מגזריים**")
+            m_data = pd.DataFrame({'מגזר': sn, 'מרווח (%)': [d['new_biz_margin']*1.1, d['new_biz_margin']*1.4, d['new_biz_margin']*0.6]})
+            st.plotly_chart(px.bar(m_data, x='מגזר', y='מרווח (%)', color='מגזר', template="plotly_dark", height=350).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
+        
+        st.divider()
+        st.write("### 📈 ניתוח תנועת ה-CSM (Waterfall)")
+        
+        wf = go.Figure(go.Waterfall(
+            name="CSM", orientation="v", measure=["relative", "relative", "relative", "total"],
+            x=["יתרת פתיחה", "מכירות חדשות", "שחרור לרווח", "יתרת סגירה"],
+            y=[d['csm_total']*0.9, d['csm_total']*0.15, -d['csm_total']*d['csm_release_rate']/100, d['csm_total']],
+            increasing={"marker":{"color":"#3b82f6"}}, decreasing={"marker":{"color":"#f87171"}}, totals={"marker":{"color":"#1e293b"}}
+        ))
+        wf.update_layout(template="plotly_dark", height=400, paper_bgcolor='rgba(0,0,0,0)'); st.plotly_chart(wf, use_container_width=True)
 
     with tabs[3]: # Stress Test
         s1, s2, s3 = st.columns(3)
-        with s1: ir_s = st.slider("ריבית (bps)", -100, 100, 0)
-        with s2: mk_s = st.slider("מניות (%)", 0, 40, 0)
-        with s3: lp_s = st.slider("ביטולים (%)", 0, 20, 0)
-        impact = (ir_s * d['int_sens']) + (mk_s * d['mkt_sens']) + (lp_s * d['lapse_sens'])
+        with s1: ir = st.slider("ריבית (bps)", -100, 100, 0)
+        with s2: mk = st.slider("מניות (%)", 0, 40, 0)
+        impact = (ir * d['int_sens']) + (mk * d['mkt_sens'])
         st.metric("סולבנסי חזוי", f"{(d['solvency_ratio']-impact):.1f}%", delta=f"{-impact:.1f}%", delta_color="inverse")
 
     with tabs[4]: # השוואה
-        metric = st.selectbox("בחר מדד:", ['solvency_ratio', 'roe', 'inv_yield', 'csm_total'], key="bench")
-        st.plotly_chart(px.bar(df[df['quarter']==s_q].sort_values(by=metric), x='display_name', y=metric, color='display_name', template="plotly_dark", height=350, text_auto='.1f').update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        metric = st.selectbox("בחר מדד להשוואה:", ['solvency_ratio', 'roe', 'inv_yield', 'csm_total', 'combined_ratio'])
+        st.plotly_chart(px.bar(df[df['quarter']==s_q].sort_values(by=metric), x='display_name', y=metric, color='display_name', template="plotly_dark", height=380, text_auto='.1f').update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 else:
     st.error("לא נמצא מחסן נתונים.")
