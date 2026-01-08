@@ -1,5 +1,6 @@
-streamlit
+streamlit==1.31.0
 pandas
 plotly
 pdfplumber
 requests
+yfinance
