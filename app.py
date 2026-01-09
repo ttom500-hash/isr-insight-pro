@@ -3,28 +3,36 @@ import google.generativeai as genai
 import os
 import time
 
-# --- 1. הגדרות וחיבור גמיש למפתח ---
+# --- 1. הגדרות וחיבור חכם (פותר שגיאת 404) ---
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-# מנגנון איתור מפתח גמיש - מחפש את השם המדויק או כל ערך קיים
 def get_api_key():
-    if "GOOGLE_API_KEY" in st.secrets:
-        return st.secrets["GOOGLE_API_KEY"]
-    # אם המשתמש קרא למפתח בשם אחר, ננסה למשוך את הערך הראשון שנמצא
-    for key in st.secrets:
-        return st.secrets[key]
+    if "GOOGLE_API_KEY" in st.secrets: return st.secrets["GOOGLE_API_KEY"]
+    for key in st.secrets: return st.secrets[key]
     return None
 
 api_key = get_api_key()
-
 if not api_key:
-    st.error("⛔ שגיאה: לא נמצא מפתח API ב-Secrets. אנא הוסף אותו בהגדרות האפליקציה.")
+    st.error("⛔ מפתח API לא נמצא.")
     st.stop()
 
 genai.configure(api_key=api_key)
-model = genai.GenerativeModel("gemini-1.5-flash")
 
-# --- 2. מנוע סריקת קבצים (ממלא את התפריט הימני) ---
+# פונקציה לבחירת מודל תקין אוטומטית
+@st.cache_resource
+def load_smart_model():
+    try:
+        # בדיקה אילו מודלים זמינים לחשבון שלך
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # עדיפות לגרסת ה-Flash המעודכנת
+        model_name = next((m for m in available_models if "flash" in m), available_models[0])
+        return genai.GenerativeModel(model_name)
+    except:
+        return genai.GenerativeModel("gemini-pro") # גיבוי למודל סטנדרטי
+
+model = load_smart_model()
+
+# --- 2. מנוע סריקת קבצים (ממלא את התפריט) ---
 BASE_DIR = "data/Insurance_Warehouse"
 
 def get_hierarchy():
@@ -40,39 +48,37 @@ def get_hierarchy():
                         hierarchy[company][year] = ["Q1", "Q2", "Q3", "Q4"]
     return hierarchy
 
-# --- 3. ממשק צד (ניווט) ---
+# --- 3. ממשק צד (ארכיון נתונים) ---
 with st.sidebar:
     st.header("📂 ארכיון נתונים")
     data_map = get_hierarchy()
     full_path = None
     if data_map:
-        comp = st.selectbox("בחר חברה:", list(data_map.keys()))
-        year = st.selectbox("בחר שנה:", list(data_map[comp].keys()))
-        q = st.selectbox("בחר רבעון:", data_map[comp][year])
+        comp = st.selectbox("חברה:", list(data_map.keys()))
+        year = st.selectbox("שנה:", list(data_map[comp].keys()))
+        q = st.selectbox("רבעון:", data_map[comp][year])
         report_dir = os.path.join(BASE_DIR, comp, year, q, "Financial_Reports")
         if os.path.exists(report_dir):
             files = [f for f in os.listdir(report_dir) if f.endswith(".pdf")]
             if files:
-                selected_file = st.selectbox("בחר דוח:", files)
+                selected_file = st.selectbox("דוח:", files)
                 full_path = os.path.join(report_dir, selected_file)
-    else:
-        st.error("תיקיית data לא נמצאה ב-GitHub.")
 
-# --- 4. פונקציית הניתוח ---
+# --- 4. לוגיקת ניתוח ---
 def run_analysis(path, prompt):
-    with st.spinner("מנתח נתונים..."):
+    with st.spinner("מנתח..."):
         try:
             f = genai.upload_file(path, mime_type="application/pdf")
             while f.state.name == "PROCESSING":
                 time.sleep(2)
                 f = genai.get_file(f.name)
             response = model.generate_content([f, prompt])
-            genai.delete_file(f.name) # ניקוי בסיום
+            genai.delete_file(f.name)
             return response.text
         except Exception as e:
-            return f"תקלה בניתוח: {e}"
+            return f"תקלה: {e}"
 
-# --- 5. גוף האפליקציה (התוכן) ---
+# --- 5. גוף האפליקציה ---
 st.title("🏢 Apex Pro - דשבורד מפקח")
 
 if full_path:
@@ -80,24 +86,19 @@ if full_path:
     t1, t2, t3 = st.tabs(["📊 IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
     
     with t1:
-        st.subheader("ניתוח תקן IFRS 17")
-        if st.button("נתח תנועת CSM"):
-            res = run_analysis(full_path, "בצע ניתוח עומק של תנועת ה-CSM וזהה חוזים מכבידים.")
-            st.markdown(res)
+        if st.button("נתח CSM"):
+            st.markdown(run_analysis(full_path, "נתח תנועת CSM וזהה חוזים מכבידים."))
             
     with t2:
-        st.subheader("מבחני לחץ")
-        scen = st.selectbox("בחר תרחיש:", ["רעידת אדמה", "עליית ריבית", "קריסת שווקים"])
-        if st.button("הרץ סימולציה 🚀"):
-            res = run_analysis(full_path, f"נתח את השפעת תרחיש {scen} על יחס הסולבנסי.")
-            st.markdown(res)
+        scen = st.selectbox("תרחיש:", ["רעידת אדמה", "עליית ריבית"])
+        if st.button("הרץ סימולציה"):
+            st.markdown(run_analysis(full_path, f"נתח השפעת {scen} על יחס סולבנסי."))
 
     with t3:
-        st.subheader("5 המדדים הקריטיים (KPIs)")
-        st.info("ניתוח המבוסס על צ'קליסט הזיכרון [2026-01-03]")
+        st.info("בדיקת 5 מדדי ה-KPI הקריטיים [2026-01-03]")
         if st.button("בצע ניתוח KPIs מלא"):
-            # שימוש ב-5 המדדים ששמרנו בזיכרון
-            p = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (על בסיס רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות."
+            # שימוש ב-5 המדדים ששמרנו בזיכרון [cite: 2026-01-03]
+            p = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (בהתבסס על רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות." [cite: 2026-01-03]
             st.markdown(run_analysis(full_path, p))
 else:
-    st.info("👈 בחר דוח מהתפריט הימני כדי להתחיל.")
+    st.info("👈 בחר דוח מהתפריט הימני.")
