@@ -9,57 +9,58 @@ st.set_page_config(page_title="Apex Pro", layout="wide")
 st.markdown("""<style>.stApp {direction: rtl;} h1, h2, h3, p, div {text-align: right;} 
 .stTextInput>div>div>input {text-align: right;} .stChatMessage {direction: rtl; text-align: right;}</style>""", unsafe_allow_html=True)
 
-st.title("🏢 Apex Pro - אנליסט חכם")
+st.title("🏢 Apex Pro - אנליסט אוטומטי")
 
-# --- 2. מנגנון איתור מפתח חכם 🕵️‍♂️ ---
-api_key = None
-# ניסיון 1: השם הרשמי
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-# ניסיון 2: השם הישן
-elif "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-
-# בדיקה האם נמצא מפתח
+# --- 2. חיבור למפתח (מהכספת בלבד) ---
+api_key = st.secrets.get("GOOGLE_API_KEY")
 if not api_key:
-    st.error("❌ לא נמצא מפתח מתאים ב-Secrets.")
-    st.write("המערכת חיפשה: `GOOGLE_API_KEY` או `GEMINI_API_KEY`")
-    
-    # הצגת מה שכן קיים (כדי לעזור לך למצוא את הטעות)
-    if st.secrets:
-        st.warning("⚠️ המפתחות שכן נמצאו בכספת הם:")
-        st.code(list(st.secrets.keys()))
-        st.info("אם השם שונה, נא לשנות אותו ב-Secrets לשם התקני: GOOGLE_API_KEY")
-    else:
-        st.error("הכספת ריקה לחלוטין! וודא שלחצת על Save.")
-    
+    st.error("❌ חסר מפתח ב-Secrets. נא להוסיף GOOGLE_API_KEY")
     st.stop()
 
-# --- 3. חיבור ואיתור מודל ---
 genai.configure(api_key=api_key)
 
+# --- 3. המוח: איתור אוטומטי של המודל הנכון ---
 @st.cache_resource
-def get_model():
-    # רשימת עדיפויות
-    candidates = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+def get_best_model():
     try:
-        my_models = [m.name for m in genai.list_models()]
-        # בדיקה האם המועדפים קיימים
-        for cand in candidates:
-            full_name = f"models/{cand}"
-            if full_name in my_models:
-                return cand
-        return "gemini-1.5-flash" # ברירת מחדל
-    except:
-        return "gemini-1.5-flash"
+        # מבקש מגוגל את רשימת כל המודלים הזמינים למפתח הזה
+        available_models = list(genai.list_models())
+        
+        # סינון: רק מודלים שיודעים לייצר טקסט
+        text_models = [m for m in available_models if 'generateContent' in m.supported_generation_methods]
+        
+        if not text_models:
+            return None, "לא נמצאו מודלים זמינים."
+            
+        # חיפוש המודל המהיר ביותר (Flash)
+        for m in text_models:
+            if "flash" in m.name.lower():
+                return m.name, "Flash (הכי מהיר)"
+        
+        # אם אין Flash, חפש Pro
+        for m in text_models:
+            if "pro" in m.name.lower():
+                return m.name, "Pro (חזק ומדויק)"
+                
+        # ברירת מחדל: הראשון שברשימה
+        return text_models[0].name, "Standard"
+        
+    except Exception as e:
+        return None, str(e)
 
-model_name = get_model()
-st.caption(f"מחובר למודל: {model_name}")
-model = genai.GenerativeModel(model_name)
+# ביצוע הבדיקה
+model_name, model_desc = get_best_model()
+
+if model_name:
+    st.success(f"✅ מחובר בהצלחה! משתמש במודל: **{model_name}**")
+    model = genai.GenerativeModel(model_name)
+else:
+    st.error(f"תקלה במציאת מודל: {model_desc}")
+    st.stop()
 
 # --- 4. פונקציית העלאה ---
 def upload_file(path):
-    msg = st.toast("מעלה...", icon="⏳")
+    msg = st.toast("מעלה קובץ...", icon="⏳")
     try:
         file = genai.upload_file(path, mime_type="application/pdf")
         while file.state.name == "PROCESSING":
@@ -83,7 +84,6 @@ with st.sidebar:
     if mode == "GitHub":
         if os.path.exists(base_path):
             comp = st.selectbox("חברה", os.listdir(base_path))
-            # זיהוי שנה
             yp = os.path.join(base_path, comp)
             years = [d for d in os.listdir(yp) if os.path.isdir(os.path.join(yp, d))] if os.path.exists(yp) else ["2025"]
             year = st.selectbox("שנה", years)
