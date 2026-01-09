@@ -1,8 +1,8 @@
-streamlit
+PyPDF2
 google-generativeai
+pdf2image
 PyMuPDF
-yfinance
-plotly
-pandas
 pillow
-requests
+plotly
+streamlit
+pandas
