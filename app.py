@@ -28,12 +28,14 @@ ai_ready = initialize_ai()
 @st.cache_resource
 def get_stable_model():
     if not ai_ready: return None, "None"
-    # תיקון שגיאת 404: שימוש בנתיב המודל המעודכן ביותר
-    model_name = 'models/gemini-1.5-flash-latest'
+    # תיקון שגיאת 404: שימוש בשם המודל הבסיסי ללא הקידומת 'models/'
+    # גרסה זו תואמת בצורה הטובה ביותר את Streamlit Cloud
+    model_name = 'gemini-1.5-flash'
     try:
         return genai.GenerativeModel(model_name), model_name
-    except Exception:
-        return genai.GenerativeModel('gemini-1.5-flash'), 'gemini-1.5-flash'
+    except Exception as e:
+        st.error(f"שגיאה בטעינת המודל: {e}")
+        return None, "Error"
 
 ai_model, active_model_name = get_stable_model()
 
@@ -57,14 +59,15 @@ def extract_deep_context(pdf_path):
     try:
         doc = fitz.open(pdf_path)
         for i in range(min(len(doc), 50)):
-            full_text += f"\n[Page {i+1}]\n" + doc[i].get_text()
+            full_text += f"\n[דף {i+1}]\n" + doc[i].get_text()
             if i < 5:
                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(2, 2))
                 preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
         return full_text, preview_images
     except Exception as e:
         return f"Error: {e}", []
-        # מסד הנתונים המלא כולל ה-KPIs הקריטיים
+
+# מסד הנתונים של השוק
 market_df = pd.DataFrame({
     "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "Solvency %": [184, 172, 175, 158, 149],
@@ -74,9 +77,8 @@ market_df = pd.DataFrame({
     "Expense Ratio %": [18.2, 19.1, 17.5, 20.4, 19.8],
     "NB Margin %": [4.8, 4.5, 4.3, 3.8, 3.9]
 })
-
 # ==========================================
-# 3. SIDEBAR - AUTOMATED RADAR
+# 3. SIDEBAR & NAVIGATION
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -90,11 +92,11 @@ with st.sidebar:
     if fin_paths:
         st.success(f"✅ דוח כספי זוהה: {os.path.basename(fin_paths[0])[:15]}")
     else:
-        st.warning("❌ דוח כספי לא נמצא בנתיב")
+        st.warning("❌ דוח כספי לא נמצא")
     st.caption(f"AI Analytic Core: {active_model_name}")
 
 # ==========================================
-# 4. MAIN TERMINAL - FULL FEATURES
+# 4. MAIN TERMINAL
 # ==========================================
 st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
 
@@ -103,7 +105,7 @@ tabs = st.tabs(["📊 Critical KPIs", "⛓️ IFRS 17 Engine", "📈 Financial R
 # --- TAB 1: Critical KPIs ---
 with tabs[0]:
     row = market_df[market_df["חברה"] == sel_comp].iloc[0]
-    st.subheader("מדדי ליבה - IFRS 17 & Solvency II")
+    st.subheader("מדדי ליבה")
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Solvency Ratio", f"{row['Solvency %']}%")
     k2.metric("ROE", f"{row['ROE %']}%")
@@ -117,46 +119,37 @@ with tabs[0]:
         st.plotly_chart(px.bar(market_df, x="חברה", y="CSM (B₪)", color="חברה", title="השוואת עתודות רווח (CSM)"), use_container_width=True)
     with c2:
         st.plotly_chart(px.pie(values=[60, 25, 15], names=["Life", "Health", "P&C"], title="Profit Mix by Segment"), use_container_width=True)
-        # --- TAB 2: IFRS 17 ENGINE ---
+
+# --- TAB 2: IFRS 17 ---
 with tabs[1]:
-    st.subheader("⛓️ IFRS 17: CSM Analytics & Waterfall")
+    st.subheader("⛓️ IFRS 17: CSM Analytics")
     fig_wf = go.Figure(go.Waterfall(
         x = ["Opening", "New Business", "Changes", "Onerous", "Release", "Closing"],
         y = [14200, 850, 150, -320, -1100, 13780],
         measure = ["absolute", "relative", "relative", "relative", "relative", "total"]
     ))
     st.plotly_chart(fig_wf, use_container_width=True)
-    
-    m1, m2, m3 = st.columns(3)
-    m1.info("**VFA Approach**\n\nביטוחי מנהלים וחיסכון")
-    m2.success("**GMM Approach**\n\nסיעוד וחיים מסורתי")
-    m3.warning("**PAA Approach**\n\nאלמנטר ובריאות")
 
-# --- TAB 3: FINANCIAL RATIOS ---
+# --- TAB 3: RATIOS ---
 with tabs[2]:
-    st.subheader("📈 Financial Ratio Deep Analysis")
+    st.subheader("📈 Financial Ratio Analysis")
     b1, b2, b3 = st.columns(3)
     with b1:
         st.metric("Current Ratio", "1.42")
-        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** נכסים שוטפים / התחייבויות שוטפות.")
+        with st.expander("ℹ️ פירוט"): st.write("נכסים שוטפים / התחייבויות שוטפות.")
     with b2:
         st.metric("Equity to Assets", "11.8%")
-        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** הון עצמי / סך מאזן.")
     with b3:
         st.metric("Financial Leverage", "7.8x")
-        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** סך הנכסים / הון עצמי.")
 
-# --- TAB 4: STRESS SCENARIOS ---
+# --- TAB 4: STRESS ---
 with tabs[3]:
-    st.subheader("🛡️ סימולציית תרחישי קיצון (Stress Suite)")
+    st.subheader("🛡️ Stress Suite")
     ir_s = st.slider("📉 ריבית (bps)", -100, 100, 0)
     mkt_s = st.slider("📉 מניות (%)", 0, 40, 0)
     impact = (ir_s * 0.12) - (mkt_s * 0.65)
     new_sol = row['Solvency %'] + impact
-    fig_g = go.Figure(go.Indicator(
-        mode = "gauge+number+delta", value = new_sol, delta = {'reference': row['Solvency %']},
-        gauge = {'axis': {'range': [80, 250]}, 'steps': [{'range': [0, 100], 'color': "red"}, {'range': [100, 140], 'color': "orange"}]}))
-    st.plotly_chart(fig_g, use_container_width=True)
+    st.metric("Solvency לאחר קיצון", f"{new_sol:.1f}%", delta=f"{impact:.1f}%")
 
 # --- TAB 5: AI HYBRID RESEARCH ---
 with tabs[4]:
@@ -164,15 +157,27 @@ with tabs[4]:
     if fin_paths:
         query = st.text_input("שאל שאלה מקצועית (למשל: 'מהו ההון העצמי?'):")
         if query and ai_ready:
-            with st.spinner("סורק את כל הדוח ומצליב נתונים..."):
+            with st.spinner("מבצע הצלבת נתונים (טקסט + תמונה)..."):
                 try:
                     full_text, pages = extract_deep_context(fin_paths[0])
-                    with st.expander("צפה בדפים שנסרקו על ידי ה-AI"):
+                    with st.expander("צפה בדפים שנסרקו"):
                         cols = st.columns(len(pages))
                         for idx, p in enumerate(pages): cols[idx].image(p, use_container_width=True)
-                    prompt = f"אתה אנליסט ביטוח בכיר. נתח את הטקסט והתמונות וענה בעברית: {query}\n\nהקשר מחולץ:\n{full_text[:14000]}"
+                    
+                    # פרומפט המשלב את הטקסט העמוק שחולץ עם תמונת השער
+                    prompt = f"""
+                    אתה אנליסט ביטוח בכיר. נתח את הטקסט והתמונות המצורפים וענה בעברית מקצועית.
+                    משימה: חפש בטקסט שחולץ (50 דפים) את המילים 'הון עצמי' או 'בעלי מניות' בטבלאות המאזן.
+                    
+                    השאלה: {query}
+                    
+                    טקסט מחולץ מהדוח:
+                    {full_text[:15000]}
+                    """
                     response = ai_model.generate_content([prompt, pages[0]])
                     st.markdown("### 📝 תשובת האנליסט:")
                     st.write(response.text)
-                except Exception as e: st.error(f"שגיאה בניתוח: {e}")
-    else: st.warning("⚠️ לא נמצא דוח PDF לסריקה אוטומטית.")
+                except Exception as e:
+                    st.error(f"שגיאה בניתוח: {e}")
+    else:
+        st.warning("⚠️ לא נמצא דוח PDF לסריקה אוטומטית.")
