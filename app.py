@@ -28,15 +28,15 @@ st.markdown("""
 st.title("📊 Apex Pro - ניתוח דוחות ביטוח מתקדם")
 st.caption("מופעל על ידי Gemini 1.5 Pro - המודל החזק ביותר לניתוח פיננסי")
 
-# --- 4. הגדרת API (החלק המתוקן) ---
+# --- 4. הגדרת API ---
 # בדיקה האם המפתח קיים ב-Secrets לפני השימוש
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
 else:
     st.error("⚠️ שגיאה: המפתח GOOGLE_API_KEY לא נמצא בקובץ ה-Secrets.")
-    st.info("אנא גש להגדרות האפליקציה -> Secrets וודא שהמפתח מוגדר כך: GOOGLE_API_KEY = \"המפתח שלך\"")
-    st.stop() # עוצר את הריצה כדי לא לקרוס
+    st.info("אנא גש להגדרות האפליקציה -> Secrets וודא שהמפתח מוגדר שם.")
+    st.stop()
 
 # --- 5. הגדרת המודל (PRO) ---
 generation_config = {
@@ -95,7 +95,7 @@ if uploaded_file:
         tmp_path = tmp_file.name
 
     try:
-        # שליחה לגוגל רק אם הקובץ חדש או שונה (אפשר לשכלל, כאן זה פשוט)
+        # שליחה לגוגל
         with st.spinner('מפענח את הדוח באמצעות Gemini Pro...'):
             gemini_file = upload_to_gemini(tmp_path)
             wait_for_files_active([gemini_file])
@@ -121,18 +121,3 @@ if uploaded_file:
                         response = model.generate_content(
                             [gemini_file, prompt],
                             request_options={"timeout": 600}
-                        )
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
-                    except Exception as e:
-                        st.error(f"שגיאה בקבלת תשובה: {e}")
-
-    except Exception as e:
-        st.error(f"שגיאה בעיבוד הקובץ: {e}")
-        
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-else:
-    st.info("👈 נא להעלות קובץ PDF כדי להתחיל.")
