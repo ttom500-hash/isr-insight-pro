@@ -7,95 +7,83 @@ import google.generativeai as genai
 import fitz  # PyMuPDF
 
 # ==========================================
-# 1. הגדרות מערכת ועיצוב (UI/UX)
+# 1. הגדרות מערכת ועיצוב
 # ==========================================
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide", page_icon="🛡️")
 
-# הזרקת CSS לעיצוב מקצועי (RTL + Dark Mode)
 st.markdown("""
     <style>
     .stApp { direction: rtl; text-align: right; background-color: #0E1117; }
-    div[data-testid="stMetric"] {
-        background-color: #262730;
-        border: 1px solid #464B5C;
-        padding: 15px;
-        border-radius: 10px;
-        color: white;
-    }
-    div[data-testid="stMetricLabel"] { color: #00FFA3 !important; font-weight: bold; }
-    h1, h2, h3 { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    .stAlert { direction: rtl; }
+    div[data-testid="stMetric"] { background-color: #262730; border: 1px solid #464B5C; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. מנוע AI חכם (Auto-Discovery)
+# 2. מנוע AI (בחירת מודל אוטומטית)
 # ==========================================
 @st.cache_resource
 def configure_ai_engine():
-    """מגדיר את המנוע ובוחר אוטומטית את המודל הטוב ביותר הזמין למפתח"""
     if "GEMINI_API_KEY" not in st.secrets:
         return None, "❌ חסר מפתח API ב-Secrets"
-    
     try:
         api_key = st.secrets["GEMINI_API_KEY"].strip()
         genai.configure(api_key=api_key)
         
-        # סריקת מודלים זמינים
+        # סריקת מודלים
         models = list(genai.list_models())
         chat_models = [m for m in models if 'generateContent' in m.supported_generation_methods]
         
         if not chat_models:
-            return None, "⚠️ המפתח תקין אך אין הרשאות למודלי צ'אט."
-            
-        # בחירה חכמה: העדפה ל-Flash (מהיר) או גרסאות 2.0
-        selected_model = chat_models[0] # ברירת מחדל
+            return None, "⚠️ המפתח תקין אך אין מודלים זמינים לצ'אט."
+        
+        # בחירה חכמה: העדפה ל-Flash או גרסאות 2.0
+        selected = chat_models[0]
         for m in chat_models:
             if 'flash' in m.name.lower():
-                selected_model = m
+                selected = m
                 break
-        
-        return genai.GenerativeModel(selected_model.name), f"✅ מחובר ל-{selected_model.name}"
+                
+        return genai.GenerativeModel(selected.name), f"✅ מחובר ל-{selected.name}"
 
     except Exception as e:
-        return None, f"❌ שגיאת התחברות: {str(e)}"
+        return None, f"❌ שגיאת חיבור: {str(e)}"
 
-# אתחול המודל
 model, status_msg = configure_ai_engine()
 
 # ==========================================
-# 3. מנוע איתור קבצים (Smart Finder v2.0)
+# 3. מנוע איתור קבצים (Deep Scan)
 # ==========================================
-def find_report_file(base_dir, report_type, strict_name=None):
+def find_file_recursive(root_path, file_type):
     """
-    פונקציה חכמה לאיתור קבצים.
-    report_type: 'finance' או 'solvency'
+    סורק את כל התיקיות תחת השנה/רבעון כדי למצוא את הקובץ הנכון.
+    file_type: 'finance' או 'solvency'
     """
-    if not os.path.exists(base_dir):
+    if not os.path.exists(root_path):
         return None
         
-    files = [f for f in os.listdir(base_dir) if f.lower().endswith('.pdf')]
-    if not files:
-        return None
-
-    # לוגיקה לדוחות סולבנסי: קח כל PDF שנמצא בתיקייה (פותר את בעיית השמות)
-    if report_type == "solvency":
-        return os.path.join(base_dir, files[0])
-    
-    # לוגיקה לדוחות כספיים: נסה למצוא התאמה לשם
-    if report_type == "finance" and strict_name:
-        for f in files:
-            if strict_name.lower() in f.lower():
-                return os.path.join(base_dir, f)
-        # אם לא מצא התאמה מדויקת, קח את הראשון שמכיל 'report' או סתם הראשון
-        return os.path.join(base_dir, files[0])
-        
+    # סריקת עומק (Walk) בתוך התיקייה של הרבעון
+    for current_root, dirs, files in os.walk(root_path):
+        for file in files:
+            # בדיקה גסה: האם זה קובץ PDF?
+            if file.lower().endswith(".pdf"):
+                full_path = os.path.join(current_root, file)
+                path_lower = full_path.lower()
+                
+                # זיהוי סולבנסי (לפי שם התיקייה או הקובץ)
+                is_solvency = "solvency" in path_lower or "sfcr" in path_lower
+                
+                if file_type == "solvency" and is_solvency:
+                    return full_path
+                
+                # זיהוי כספי (כל מה שאינו סולבנסי)
+                if file_type == "finance" and not is_solvency:
+                    return full_path
+                    
     return None
 
 # ==========================================
-# 4. נתוני דמה לדשבורד (KPI Placeholder)
+# 4. נתוני שוק (KPIs)
 # ==========================================
-# הנתונים האלו יוצגו עד שה-AI ישלוף נתונים אמיתיים
 market_df = pd.DataFrame({
     "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "Solvency Ratio": [184, 172, 175, 158, 149],
@@ -105,157 +93,168 @@ market_df = pd.DataFrame({
 })
 
 # ==========================================
-# 5. תפריט צד (Sidebar Navigation)
+# 5. תפריט צד (Sidebar)
 # ==========================================
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/shield.png", width=60)
     st.title("Apex Enterprise")
-    st.caption(status_msg) # חיווי חיבור ל-AI
+    st.caption(status_msg)
     st.divider()
     
-    # בחירת פרמטרים
+    # בחירת חברה ושנה (ברירת מחדל 2025 כדי למנוע שגיאות!)
     sel_comp = st.selectbox("בחר חברה:", market_df["חברה"])
-    sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
+    sel_year = st.selectbox("שנה:", [2025, 2024, 2026]) # שים לב: 2025 ראשון
     sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # ניהול נתיבים (תומך ב-Data ו-data)
-    base_path = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}"
-    if not os.path.exists(base_path):
-        base_path = f"Data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}"
+    # לוגיקה חכמה לזיהוי תיקיית הנתונים (data או Data)
+    base_path_option1 = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}"
+    base_path_option2 = f"Data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}"
     
-    # איתור הקבצים בפועל
-    fin_dir = os.path.join(base_path, "Financial_Reports")
-    sol_dir = os.path.join(base_path, "Solvency_Reports")
+    if os.path.exists(base_path_option1):
+        final_base_path = base_path_option1
+    elif os.path.exists(base_path_option2):
+        final_base_path = base_path_option2
+    else:
+        final_base_path = None
+
+    # חיפוש הקבצים
+    fin_file = None
+    sol_file = None
     
-    fin_file = find_report_file(fin_dir, "finance", f"{sel_comp}_{sel_q}_{sel_year}")
-    sol_file = find_report_file(sol_dir, "solvency") # כאן התיקון הגדול!
+    if final_base_path:
+        fin_file = find_file_recursive(final_base_path, "finance")
+        sol_file = find_file_recursive(final_base_path, "solvency")
     
     st.divider()
     c1, c2 = st.columns(2)
     with c1: 
-        st.write("📄 **כספי**")
-        st.write('✅' if fin_file else '❌')
+        st.markdown("**📄 כספי**")
+        if fin_file: st.success("מחובר") 
+        else: st.error("חסר")
     with c2: 
-        st.write("🛡️ **סולבנסי**")
-        st.write('✅' if sol_file else '❌')
+        st.markdown("**🛡️ סולבנסי**")
+        if sol_file: st.success("מחובר") 
+        else: st.error("חסר")
+
+    # דיבוג למשתמש אם אין נתונים
+    if not final_base_path:
+        st.warning(f"אין נתונים לשנת {sel_year}")
 
 # ==========================================
-# 6. מסך ראשי: לוגיקה עסקית
+# 6. מסך ראשי
 # ==========================================
 st.title(f"🏛️ {sel_comp} | Strategic Dashboard")
-st.markdown(f"**תקופה:** {sel_year} {sel_q} | **סטטוס רגולטורי:** פעיל")
+st.caption(f"תקופת דוח: {sel_year} {sel_q}")
 
-# שליפת נתונים ספציפיים לחברה שנבחרה (לצורך התצוגה הגרפית)
-company_data = market_df[market_df["חברה"] == sel_comp].iloc[0]
+# נתוני החברה הנבחרת
+row = market_df[market_df["חברה"] == sel_comp].iloc[0]
 
-# לשוניות ניווט
-tab1, tab2, tab3 = st.tabs(["📊 KPI & Trends", "🤖 AI Analyst", "📉 Solvency Analysis"])
+tab1, tab2, tab3 = st.tabs(["📊 KPI Dashboard", "🤖 AI Analyst", "📉 Solvency Lab"])
 
-# --- TAB 1: מדדים פיננסיים ---
+# --- טאב 1: מדדים ---
 with tab1:
-    st.subheader("מדדי ליבה (Core KPIs)")
-    
-    # שורת מדדים (Metrics)
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("יחס כושר פירעון", f"{company_data['Solvency Ratio']}%", "2%")
-    k2.metric("תשואה להון (ROE)", f"{company_data['ROE']}%", "0.5%")
-    k3.metric("יתרת CSM (מיליארד)", f"₪{company_data['CSM (B)']}", "-0.2")
-    k4.metric("Combined Ratio", f"{company_data['Combined Ratio']}%", "-1.2%")
+    k1.metric("Solvency Ratio", f"{row['Solvency Ratio']}%", "Stable")
+    k2.metric("ROE (תשואה)", f"{row['ROE']}%", "+0.2%")
+    k3.metric("CSM Value", f"₪{row['CSM (B)']}B", "Growth")
+    k4.metric("Combined Ratio", f"{row['Combined Ratio']}%", "-1.5%")
     
     st.divider()
     
-    # גרפים
     g1, g2 = st.columns(2)
     with g1:
-        fig_sol = px.bar(market_df, x="חברה", y="Solvency Ratio", 
-                         title="השוואת יחס כושר פירעון ענפי", color="Solvency Ratio",
-                         color_continuous_scale="Teal")
-        st.plotly_chart(fig_sol, use_container_width=True)
-    
+        fig = px.bar(market_df, x="חברה", y="Solvency Ratio", 
+                     title="השוואת יחס כושר פירעון", color="Solvency Ratio",
+                     color_continuous_scale="Teal")
+        st.plotly_chart(fig, use_container_width=True)
     with g2:
-        fig_csm = px.line(market_df, x="חברה", y="CSM (B)", markers=True,
-                          title="מגמת רווחיות עתידית (CSM)")
-        fig_csm.update_traces(line_color='#00FFA3', line_width=4)
-        st.plotly_chart(fig_csm, use_container_width=True)
+        fig2 = px.line(market_df, x="חברה", y="CSM (B)", markers=True, 
+                       title="מגמת רווחיות (CSM)")
+        fig2.update_traces(line_color='#00FFA3', line_width=3)
+        st.plotly_chart(fig2, use_container_width=True)
 
-# --- TAB 2: האנליסט האוטומטי (הליבה) ---
+# --- טאב 2: אנליסט AI ---
 with tab2:
-    st.subheader("🕵️‍♀️ חדר מחקר AI")
+    st.subheader("🕵️‍♀️ חדר מחקר וניתוח דוחות")
     
-    col_ask, col_view = st.columns([2, 1])
+    # בדיקה איזה דוחות זמינים
+    options = []
+    if fin_file: options.append("דוח כספי")
+    if sol_file: options.append("דוח סולבנסי")
     
-    with col_ask:
-        mode = st.radio("בחר מקור מידע:", ["דוח כספי", "דוח סולבנסי"], horizontal=True)
+    if not options:
+        st.warning("⚠️ לא ניתן להפעיל את האנליסט - חסרים קבצי דוחות בתיקייה.")
+    else:
+        mode = st.radio("בחר מקור לניתוח:", options, horizontal=True)
         active_path = fin_file if mode == "דוח כספי" else sol_file
         
-        if active_path:
-            st.success(f"📂 מקור נתונים מחובר: {os.path.basename(active_path)}")
-            
-            # שאלות מוכנות מראש
-            pre_questions = [
-                "מהו ההון העצמי המיוחס לבעלי המניות?",
-                "מהו הרווח הכולל לתקופה?",
-                "האם חל שינוי מהותי בהפרשות לתביעות?",
-                "נתח את יחס הפירעון הכלכלי."
-            ]
-            selected_q = st.selectbox("שאלות נפוצות:", ["בחר שאלה או כתוב למטה..."] + pre_questions)
-            
-            user_q = st.text_input("הקלד שאלה חופשית:", value=selected_q if selected_q != "בחר שאלה או כתוב למטה..." else "")
-            
-            if st.button("🚀 הפעל אנליזה", type="primary"):
-                if not model:
-                    st.error("ה-AI מנותק. בדוק את הגדרות ה-API.")
-                elif not user_q:
-                    st.warning("אנא הזן שאלה.")
-                else:
-                    with st.spinner("ה-AI קורא את הדוח, מצליב נתונים ומנסח תשובה..."):
-                        try:
-                            # קריאת ה-PDF
-                            doc = fitz.open(active_path)
-                            # קריאת כמות עמודים אופטימלית (40 ראשונים לרוב מכילים את העיקר)
-                            text_content = ""
-                            for i in range(min(len(doc), 50)):
-                                text_content += doc[i].get_text()
-                            
-                            # הפרומפט המתוחכם
-                            prompt = f"""
-                            פעל כאנליסט ביטוח בכיר המתמחה ברגולציה ישראלית (Solvency II, IFRS 17).
-                            עיין בטקסט המצורף מתוך דוח של חברת {sel_comp}.
-                            
-                            שאלה: {user_q}
-                            
-                            הנחיות:
-                            1. תן תשובה מדויקת המבוססת על הטקסט בלבד.
-                            2. אם יש נתונים מספריים, הצג אותם בבירור (עם יחידות מידה).
-                            3. אם המידע לא קיים בטקסט, ציין זאת.
-                            
-                            טקסט המקור (חלקי):
-                            {text_content[:35000]}
-                            """
-                            
-                            response = model.generate_content(prompt)
-                            
-                            st.markdown("### 💡 תובנת האנליסט:")
-                            st.info(response.text)
-                            
-                        except Exception as e:
-                            st.error(f"תקלה בעיבוד: {e}")
-        else:
-            st.warning("⚠️ הקובץ המבוקש אינו קיים במחסן הנתונים.")
-            st.markdown(f"נתיב שנבדק: `{base_path}`")
+        st.success(f"📂 קובץ פעיל: {os.path.basename(active_path)}")
+        
+        # אזור השאלה
+        col_q, col_btn = st.columns([4, 1])
+        with col_q:
+            user_q = st.text_input("מה תרצה לדעת?", placeholder="למשל: מהו הרווח הכולל ברבעון?")
+        with col_btn:
+            st.write("") # מרווח
+            st.write("") 
+            run_btn = st.button("🚀 נתח", type="primary", use_container_width=True)
+        
+        if run_btn and user_q:
+            if not model:
+                st.error("ה-AI מנותק, בדוק מפתח API.")
+            else:
+                with st.spinner("ה-AI קורא את הדוח ומעבד נתונים..."):
+                    try:
+                        # קריאת ה-PDF
+                        doc = fitz.open(active_path)
+                        text_content = ""
+                        # קריאת עד 60 עמודים (מכסה את רוב הדוחות)
+                        for i in range(min(len(doc), 60)):
+                            text_content += doc[i].get_text()
+                        
+                        # הפרומפט
+                        prompt = f"""
+                        אתה אנליסט מומחה לביטוח (IFRS 17, Solvency II).
+                        התבסס אך ורק על הטקסט המצורף וענה על השאלה.
+                        
+                        שאלה: {user_q}
+                        
+                        טקסט מהדוח:
+                        {text_content[:40000]}
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        st.markdown("### 💡 תשובת האנליסט:")
+                        st.info(response.text)
+                        
+                    except Exception as e:
+                        st.error(f"תקלה בניתוח: {e}")
 
-    with col_view:
-        st.markdown("### 📑 היסטוריית שאילתות")
-        st.caption("כאן יופיע לוג של שאלות קודמות בגרסאות הבאות.")
-        st.image("https://img.icons8.com/nolan/96/bot.png", width=100)
-
-# --- TAB 3: ניתוח סולבנסי ---
+# --- טאב 3: סולבנסי ---
 with tab3:
-    st.subheader("תרחישי קיצון (Stress Testing)")
+    st.subheader("מחשבון רגישות (Stress Test)")
     
     if sol_file:
-        st.success("✅ דוח Solvency (SFCR) זוהה במערכת")
+        st.success("✅ דוח Solvency מחובר למערכת")
         
-        # סימולטור אינטראקטיבי
-        st.write("השפעת שינויים בריבית על יחס כושר הפירעון:")
-        interest_change
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            stress_val = st.slider("שינוי עקום ריבית (bps)", -100, 100, 0)
+            equity_shock = st.slider("ירידה בשוקי מניות (%)", 0, 30, 0)
+        
+        with col_s2:
+            # חישוב דמה להדגמה
+            current_sol = row['Solvency Ratio']
+            impact = (stress_val * 0.1) - (equity_shock * 0.5)
+            new_sol = current_sol + impact
+            
+            st.metric("יחס סולבנסי חזוי", f"{new_sol:.1f}%", f"{impact:.1f}%")
+            
+            fig_g = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = new_sol,
+                title = {'text': "Solvency Prediction"},
+                gauge = {'axis': {'range': [100, 200]}, 'bar': {'color': "#00FFA3"}}
+            ))
+            st.plotly_chart(fig_g, use_container_width=True)
+    else:
+        st.info("ℹ️ לצורך ביצוע סימולציות, אנא וודא שדוח סולבנסי קיים בתיקייה.")
