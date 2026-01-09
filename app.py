@@ -3,10 +3,9 @@ import google.generativeai as genai
 import os
 import time
 
-# --- 1. הגדרות בסיס ---
+# --- 1. הגדרות וחיבור ---
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-# ניסיון טעינת מפתח
 try:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key:
@@ -58,21 +57,18 @@ if full_path:
     t1, t2, t3 = st.tabs(["📊 IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
     
     with t3:
-        st.info("ניתוח 5 המדדים הקריטיים מהצ'קליסט השמור [cite: 2026-01-03]")
+        st.info("ניתוח 5 המדדים הקריטיים מהצ'קליסט השמור")
         if st.button("בצע ניתוח KPIs"):
-            with st.spinner("מנתח..."):
+            with st.spinner("מנתח נתונים..."):
                 try:
                     f = genai.upload_file(full_path, mime_type="application/pdf")
                     while f.state.name == "PROCESSING":
                         time.sleep(2)
                         f = genai.get_file(f.name)
                     
-                    # פרומפט המבוסס על המדדים ששמרנו בזיכרון [cite: 2026-01-03]
-                    p = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (בהתבסס על רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות." [cite: 2026-01-03]
+                    p = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (בהתבסס על רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות."
                     res = model.generate_content([f, p])
                     st.markdown(res.text)
-                    
-                    # מחיקת הקובץ מהשרת של גוגל בסיום לחיסכון במשאבים
                     genai.delete_file(f.name)
                 except Exception as e:
                     st.error(f"תקלה בניתוח: {e}")
