@@ -1,7 +1,6 @@
 import os
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import google.generativeai as genai
 import fitz  # PyMuPDF
 from PIL import Image
@@ -10,51 +9,48 @@ import io
 # ==========================================
 # 1. SETUP & AI CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="Apex Pro Enterprise | Strategic AI Terminal", layout="wide")
+st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
 def initialize_ai():
     try:
         if "GEMINI_API_KEY" in st.secrets:
-            api_key = st.secrets["GEMINI_API_KEY"]
-            if api_key and api_key != "your_key_here":
-                genai.configure(api_key=api_key)
-                return True
-        return False
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            return genai.GenerativeModel('gemini-1.5-flash')
+        return None
     except Exception:
-        return False
+        return None
 
-ai_ready = initialize_ai()
-
-@st.cache_resource
-def get_stable_model():
-    if not ai_ready: return None, "Missing API Key"
-    model_name = 'gemini-1.5-flash'
-    try:
-        return genai.GenerativeModel(model_name), model_name
-    except Exception as e:
-        return None, str(e)
-
-ai_model, active_model_name = get_stable_model()
+model = initialize_ai()
 
 # ==========================================
-# 2. PDF DEEP SCAN ENGINE
+# 2. פונקציית חיפוש קבצים גמישה
 # ==========================================
-def extract_deep_context(pdf_path):
-    full_text = ""
-    preview_images = []
-    try:
-        doc = fitz.open(pdf_path)
-        for i in range(min(len(doc), 50)):
-            full_text += f"\n--- Page {i+1} ---\n" + doc[i].get_text()
-            if i < 5:
-                pix = doc[i].get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
-        return full_text, preview_images
-    except Exception as e:
-        return f"Error: {e}", []
+def find_pdf_path(company, year, quarter, report_type):
+    """מחפש את הקובץ בכמה וריאציות של נתיבים"""
+    
+    # הגדרת שמות הקבצים המצופים
+    if report_type == "כספי":
+        filename = f"{company}_{quarter}_{year}.pdf"
+        sub_folder = "Financial_Reports"
+    else:
+        filename = f"Solvency_{company}_{quarter}_{year}.pdf"
+        sub_folder = "Solvency_Reports"
+
+    # רשימת נתיבים אפשריים לבדיקה (כולל Data באות גדולה)
+    possible_paths = [
+        f"data/Insurance_Warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
+        f"Data/Insurance_Warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
+        f"data/insurance_warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
+        filename # בדיקה גם בתיקייה הראשית
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
 
 # ==========================================
-# 3. SIDEBAR - ניווט תיקיות חכם (תואם למבנה שלך)
+# 3. SIDEBAR - ניווט
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -64,67 +60,57 @@ with st.sidebar:
     
     st.divider()
     
-    # בניית נתיבים לפי המבנה שציינת
-    base_path = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}"
+    # חיפוש שני סוגי הדוחות
+    path_fin = find_pdf_path(sel_comp, sel_year, sel_q, "כספי")
+    path_sol = find_pdf_path(sel_comp, sel_year, sel_q, "סולבנסי")
     
-    fin_file = f"{sel_comp}_{sel_q}_{sel_year}.pdf"
-    fin_path = f"{base_path}/Financial_Reports/{fin_file}"
+    st.write(f"📄 דוח כספי: {'✅' if path_fin else '❌'}")
+    st.write(f"🛡️ דוח סולבנסי: {'✅' if path_sol else '❌'}")
     
-    sol_file = f"Solvency_{sel_comp}_{sel_q}_{sel_year}.pdf"
-    sol_path = f"{base_path}/Solvency_Reports/{sol_file}"
-    
-    # בדיקת נוכחות קבצים
-    st.subheader("סטטוס קבצים:")
-    
-    has_fin = os.path.exists(fin_path)
-    if has_fin: st.success(f"✅ דוח כספי זוהה")
-    else: st.warning(f"❌ חסר דוח כספי")
-    
-    has_sol = os.path.exists(sol_path)
-    if has_sol: st.success(f"✅ דוח סולבנסי זוהה")
-    else: st.warning(f"❌ חסר דוח סולבנסי")
+    if not path_fin and not path_sol:
+        st.info("💡 טיפ: וודא שהנתיב ב-GitHub תואם בדיוק למבנה התיקיות.")
 
 # ==========================================
 # 4. MAIN INTERFACE
 # ==========================================
 st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
 
-tabs = st.tabs(["📊 KPI Dashboard", "🤖 AI Deep Research"])
+t1, t2 = st.tabs(["📊 KPI Dashboard", "🤖 AI Analyst"])
 
-with tabs[0]:
-    st.subheader("מדדי ליבה והשוואת שוק")
-    st.info("כאן יוצגו נתונים ויזואליים מתוך מסד הנתונים.")
-    # כאן ניתן להוסיף את הגרפים שהיו לנו קודם
-
-with tabs[1]:
-    st.subheader("🤖 אנליסט AI - סריקה משולבת")
+with t2:
+    st.subheader("ניתוח דוחות עמוק")
     
-    report_type = st.radio("בחר דוח לניתוח:", ["דוח כספי (הון עצמי, רווח)", "דוח סולבנסי (יחס הון)"])
+    report_mode = st.radio("סוג דוח לניתוח:", ["כספי", "סולבנסי"])
+    active_path = path_fin if report_mode == "כספי" else path_sol
     
-    active_path = fin_path if "כספי" in report_type else sol_path
-    file_to_scan = has_fin if "כספי" in report_type else has_sol
-    
-    if file_to_scan:
-        query = st.text_input("שאל את ה-AI על הדוח הנבחר:")
+    if active_path:
+        query = st.text_input(f"שאל על דוח ה{report_mode} (למשל: מהו ההון העצמי?):")
+        
         if st.button("🚀 הרץ ניתוח עמוק") and query:
-            if ai_model:
-                with st.spinner(f"סורק את {report_type}..."):
-                    full_text, pages = extract_deep_context(active_path)
-                    
-                    # הצגת דפי שער להמחשה
-                    cols = st.columns(len(pages))
-                    for idx, p in enumerate(pages): cols[idx].image(p, use_container_width=True)
-                    
-                    prompt = f"""
-                    נתח את הדוח של חברת {sel_comp}.
-                    במידה וזה דוח כספי, אתר 'הון עצמי'. במידה וזה סולבנסי, אתר 'יחס כושר פירעון'.
-                    ענה בעברית על השאלה: {query}
-                    
-                    טקסט מהדוח:
-                    {full_text[:15000]}
-                    """
-                    response = ai_model.generate_content(prompt)
-                    st.success(response.text)
-            else: st.error("AI מנותק - בדוק Secrets")
+            if model:
+                with st.spinner("סורק דפים ומחלץ נתונים..."):
+                    try:
+                        doc = fitz.open(active_path)
+                        # סריקת 40 עמודים ראשונים לטקסט
+                        text_content = ""
+                        for i in range(min(len(doc), 40)):
+                            text_content += doc[i].get_text()
+                        
+                        prompt = f"""
+                        אתה אנליסט בכיר. נתח את דוח ה{report_mode} של חברת {sel_comp}.
+                        התמקד ב-5 ה-KPIs הקריטיים (הון עצמי, סולבנסי, רווח כולל).
+                        שאלה: {query}
+                        
+                        טקסט מהדוח:
+                        {text_content[:15000]}
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        st.markdown("---")
+                        st.success(response.text)
+                    except Exception as e:
+                        st.error(f"שגיאה בקריאת הקובץ: {e}")
+            else:
+                st.error("ה-AI לא מוגדר. בדוק את ה-API Key ב-Secrets.")
     else:
-        st.error(f"לא נמצא קובץ PDF בנתיב: {active_path}")
+        st.warning(f"לא נמצא קובץ {report_mode} עבור {sel_comp} לנתוני {sel_q} {sel_year}.")
