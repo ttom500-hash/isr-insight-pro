@@ -1,42 +1,38 @@
 import os
 import streamlit as st
-import pandas as pd
 import google.generativeai as genai
 import fitz  # PyMuPDF
 
 # ==========================================
-# 1. SETUP & AI CONFIGURATION
+# 1. הגדרות מערכת וחיבור AI
 # ==========================================
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-def initialize_ai():
-    """חיבור יציב למנוע ה-AI ללא שגיאות גרסה"""
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            api_key = st.secrets["GEMINI_API_KEY"]
-            genai.configure(api_key=api_key)
-            # שימוש בשם המודל ללא קידומות גרסה פותר את שגיאת ה-404
-            return genai.GenerativeModel('gemini-1.5-flash')
-        return None
-    except Exception:
-        return None
+def init_ai():
+    # הגדרת המודל החדש בגרסה יציבה
+    if "GEMINI_API_KEY" in st.secrets:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        return genai.GenerativeModel('gemini-1.5-flash')
+    return None
 
-model = initialize_ai()
+model = init_ai()
 
 # ==========================================
-# 2. פונקציית איתור קבצים חכמה
+# 2. מנוע איתור קבצים חכם (מתגבר על כפילויות)
 # ==========================================
-def find_pdf_smart(base_folder, target_name):
-    """מוצא קובץ בתיקייה ומתגבר על סיומות כפולות (.pdf.pdf)"""
-    if not os.path.exists(base_folder):
+def find_file_smart(base_path, file_prefix):
+    """מוצא קובץ שמתחיל בשם הנכון, גם אם יש לו סיומת כפולה"""
+    if not os.path.exists(base_path):
         return None
-    for f in os.listdir(base_folder):
-        if f.lower().startswith(target_name.lower()) and f.lower().endswith('.pdf'):
-            return os.path.join(base_folder, f)
+    
+    for f in os.listdir(base_path):
+        # בדיקה: מתחיל בשם החברה ומסתיים ב-pdf (לא משנה כמה פעמים)
+        if f.lower().startswith(file_prefix.lower()) and ".pdf" in f.lower():
+            return os.path.join(base_path, f)
     return None
 
 # ==========================================
-# 3. SIDEBAR - ניווט (תואם למבנה התיקיות שלך)
+# 3. תפריט צד (Sidebar)
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -44,53 +40,55 @@ with st.sidebar:
     year = st.selectbox("שנה:", [2024, 2025, 2026])
     q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # בדיקת נתיבים ב-GitHub (מטפל ב-data קטן וגדול)
+    # בדיקת נתיבים (תומך ב-Data ו-data)
     base_dir = f"data/Insurance_Warehouse/{comp}/{year}/{q}"
     if not os.path.exists(base_dir):
         base_dir = f"Data/Insurance_Warehouse/{comp}/{year}/{q}"
 
-    path_fin = find_pdf_smart(f"{base_dir}/Financial_Reports", f"{comp}_{q}_{year}")
-    path_sol = find_pdf_smart(f"{base_dir}/Solvency_Reports", f"Solvency_{comp}_{q}_{year}")
+    # איתור הקבצים
+    fin_path = find_file_smart(f"{base_dir}/Financial_Reports", f"{comp}_{q}_{year}")
+    sol_path = find_file_smart(f"{base_dir}/Solvency_Reports", f"Solvency_{comp}_{q}_{year}")
     
-    st.write(f"📄 דוח כספי: {'✅' if path_fin else '❌'}")
-    st.write(f"🛡️ דוח סולבנסי: {'✅' if path_sol else '❌'}")
+    st.write(f"📄 דוח כספי: {'✅' if fin_path else '❌'}")
+    st.write(f"🛡️ דוח סולבנסי: {'✅' if sol_path else '❌'}")
 
 # ==========================================
-# 4. MAIN INTERFACE
+# 4. מסך ניתוח ראשי
 # ==========================================
 st.title(f"🏛️ {comp} | Strategic AI Terminal")
 t1, t2 = st.tabs(["📊 KPI Dashboard", "🤖 AI Analyst"])
 
 with t2:
-    mode = st.radio("בחר סוג דוח:", ["כספי", "סולבנסי"])
-    active_path = path_fin if mode == "כספי" else path_sol
+    st.subheader("ניתוח דוחות עמוק")
+    mode = st.radio("בחר דוח:", ["כספי", "סולבנסי"])
+    active_path = fin_path if mode == "כספי" else sol_path
     
     if active_path:
         st.success(f"מנתח את: {os.path.basename(active_path)}")
-        query = st.text_input(f"שאל על ה{mode} (למשל: מהו ההון העצמי?):")
+        query = st.text_input("שאל את האנליסט (למשל: מהו ההון העצמי?):")
         
         if st.button("🚀 הרץ ניתוח") and query:
             if model:
                 with st.spinner("סורק דפי מאזן ומחלץ נתונים..."):
                     try:
                         doc = fitz.open(active_path)
-                        # חילוץ טקסט מ-40 עמודים ראשונים (איפה שההון העצמי נמצא)
+                        # חילוץ טקסט מ-40 עמודים ראשונים
                         text = "".join([page.get_text() for page in doc[:40]])
                         
                         prompt = f"""
-                        אתה אנליסט ביטוח. נתח את דוח ה{mode} של {comp}.
-                        אתר את הנתון 'הון עצמי מיוחס לבעלי המניות'.
+                        אתה מומחה IFRS 17. נתח את הדוח המצורף של חברת {comp}.
                         שאלה: {query}
                         
+                        התמקד בנתונים מספריים מדויקים (הון עצמי, CSM, סולבנסי).
                         טקסט מהדוח:
-                        {text[:15000]}
+                        {text[:20000]}
                         """
                         response = model.generate_content(prompt)
                         st.markdown("---")
-                        st.success(response.text)
+                        st.write(response.text)
                     except Exception as e:
-                        st.error(f"שגיאה בתהליך: {e}")
+                        st.error(f"שגיאה בניתוח: {e}")
             else:
-                st.error("ה-AI לא מוגדר. בדוק את ה-API Key ב-Secrets.")
+                st.error("שגיאת מפתח API - בדוק Secrets")
     else:
-        st.warning("הקובץ לא נמצא בתיקייה המבוקשת.")
+        st.warning("לא נמצא קובץ מתאים ב-GitHub.")
