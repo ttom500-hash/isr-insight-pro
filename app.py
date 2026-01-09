@@ -3,32 +3,22 @@ import google.generativeai as genai
 import os
 import time
 
-# --- 1. הגדרות וחיבור ---
+# --- 1. הגדרות בסיס ---
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-# משיכת מפתח API מה-Secrets
-api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key:
-    st.error("⛔ שגיאה: לא נמצא מפתח API ב-Secrets.")
+# ניסיון טעינת מפתח
+try:
+    api_key = st.secrets.get("GOOGLE_API_KEY")
+    if not api_key:
+        st.error("לא נמצא מפתח API ב-Secrets")
+        st.stop()
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except Exception as e:
+    st.error(f"שגיאת אתחול: {e}")
     st.stop()
 
-genai.configure(api_key=api_key)
-
-# מנגנון בחירת מודל אוטומטי למניעת שגיאת 404
-@st.cache_resource
-def get_model():
-    try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # מחפש עדיפות ל-Flash
-        selected = next((m for m in models if "1.5-flash" in m), models[0])
-        return genai.GenerativeModel(selected)
-    except Exception as e:
-        st.error(f"תקלה בגישה למודלים: {e}")
-        st.stop()
-
-model = get_model()
-
-# --- 2. מנוע סריקת קבצים (הפתרון ל'אין כלום') ---
+# --- 2. מנוע סריקת קבצים ---
 BASE_DIR = "data/Insurance_Warehouse"
 
 def get_hierarchy():
@@ -44,7 +34,9 @@ def get_hierarchy():
                         hierarchy[company][year] = ["Q1", "Q2", "Q3", "Q4"]
     return hierarchy
 
-# --- 3. ממשק ניווט ---
+# --- 3. ממשק משתמש ---
+st.title("🏢 Apex Pro - דשבורד מפקח")
+
 with st.sidebar:
     st.header("📂 ארכיון נתונים")
     data_map = get_hierarchy()
@@ -59,29 +51,30 @@ with st.sidebar:
             if files:
                 selected_file = st.selectbox("בחר דוח:", files)
                 full_path = os.path.join(report_dir, selected_file)
-    else:
-        st.error("לא נמצאה תיקיית data ב-GitHub.")
 
-# --- 4. גוף האפליקציה ---
-st.title("🏢 Apex Pro - דשבורד מפקח")
-
+# --- 4. ניתוח 5 המדדים הקריטיים ---
 if full_path:
     st.success(f"נבחר דוח: {selected_file}")
     t1, t2, t3 = st.tabs(["📊 IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
     
-    def run_analysis(p):
-        with st.spinner("מנתח..."):
-            try:
-                f = genai.upload_file(full_path, mime_type="application/pdf")
-                while f.state.name == "PROCESSING": time.sleep(1); f = genai.get_file(f.name)
-                return model.generate_content([f, p]).text
-            except Exception as e: return f"שגיאה: {e}"
-
     with t3:
-        st.info("ניתוח 5 המדדים הקריטיים (KPIs) השמורים בזיכרון")
-        if st.button("בצע ניתוח KPIs מלא"):
-            # שימוש במדדים ששמרנו בזיכרון
-            prompt = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE, 3. Combined Ratio, 4. CSM, 5. נזילות."
-            st.markdown(run_analysis(prompt))
+        st.info("ניתוח 5 המדדים הקריטיים מהצ'קליסט השמור [cite: 2026-01-03]")
+        if st.button("בצע ניתוח KPIs"):
+            with st.spinner("מנתח..."):
+                try:
+                    f = genai.upload_file(full_path, mime_type="application/pdf")
+                    while f.state.name == "PROCESSING":
+                        time.sleep(2)
+                        f = genai.get_file(f.name)
+                    
+                    # פרומפט המבוסס על המדדים ששמרנו בזיכרון [cite: 2026-01-03]
+                    p = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (בהתבסס על רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות." [cite: 2026-01-03]
+                    res = model.generate_content([f, p])
+                    st.markdown(res.text)
+                    
+                    # מחיקת הקובץ מהשרת של גוגל בסיום לחיסכון במשאבים
+                    genai.delete_file(f.name)
+                except Exception as e:
+                    st.error(f"תקלה בניתוח: {e}")
 else:
-    st.info("👈 בחר דוח מהתפריט הימני כדי להתחיל.")
+    st.info("👈 בחר דוח מהתפריט הימני.")
