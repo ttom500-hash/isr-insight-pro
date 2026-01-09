@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+import google.api_core.exceptions
 import tempfile
 import os
 import time
@@ -20,12 +21,13 @@ st.markdown("""
     .stTextInput > div > div > input { text-align: right; }
     .stSelectbox > div > div > div { text-align: right; }
     .stChatMessage { direction: rtl; text-align: right; }
+    /* הסתרת כפתור ה-deploy של סטרימליט שיהיה נקי */
+    .stDeployButton {display:none;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 3. כותרת ---
-st.title("🏢 Apex Pro Enterprise - ניתוח דוחות ארגוני")
-st.caption("מחובר למאגר הנתונים הארגוני (Data Warehouse)")
+st.title("🏢 Apex Pro Enterprise - מערכת ניתוח דוחות")
 
 # --- 4. הגדרת API ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -38,8 +40,8 @@ else:
 # --- 5. הגדרת המודל ---
 model = genai.GenerativeModel(
     model_name="gemini-1.5-pro", 
-    generation_config={"temperature": 0.2},
-    system_instruction="אתה אנליסט ביטוח בכיר. נתח את הדוחות לפי IFRS 17 ו-Solvency II."
+    generation_config={"temperature": 0.1}, # טמפרטורה נמוכה לדיוק בנתונים
+    system_instruction="אתה אנליסט ביטוח בכיר. התמחותך היא ב-IFRS 17 ו-Solvency II. ענה בעברית מקצועית ותמציתית."
 )
 
 # --- 6. פונקציות עזר ---
@@ -49,94 +51,110 @@ def get_available_companies(base_path):
     return [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
 
 def upload_to_gemini(path):
-    return genai.upload_file(path, mime_type="application/pdf")
+    """מעלה קובץ לגוגל ומחזיר את האובייקט"""
+    file = genai.upload_file(path, mime_type="application/pdf")
+    # המתנה לעיבוד
+    while file.state.name == "PROCESSING":
+        time.sleep(1)
+        file = genai.get_file(file.name)
+    if file.state.name != "ACTIVE":
+        raise Exception(f"הקובץ נכשל בעיבוד: {file.state.name}")
+    return file
 
-def wait_for_files_active(files):
-    st.spinner('מעבד קובץ...')
-    for name in (file.name for file in files):
-        file = genai.get_file(name)
-        while file.state.name == "PROCESSING":
-            time.sleep(2)
-            file = genai.get_file(name)
-
-# --- 7. צד ימין: בחירת קובץ מהספרייה ---
-base_path = "data/Insurance_Warehouse" # הנתיב לתיקיות שלך
+# --- 7. ניהול בחירת קובץ (צד ימין) ---
+base_path = "data/Insurance_Warehouse" 
 
 with st.sidebar:
-    st.header("🗄️ ספריית דוחות")
-    
-    # בדיקה אם התיקייה קיימת
+    st.header("🗄️ ארכיון דוחות")
     companies = get_available_companies(base_path)
     
     selected_file_path = None
     
     if companies:
-        company = st.selectbox("בחר חברה", companies)
-        year = st.selectbox("בחר שנה", ["2025", "2024"]) # אפשר לשכלל שזה יהיה דינמי
-        quarter = st.selectbox("בחר רבעון", ["Q1", "Q2", "Q3", "Q4"])
+        col1, col2 = st.columns(2)
+        with col1:
+            company = st.selectbox("חברה", companies)
+        with col2:
+            year = st.selectbox("שנה", ["2025", "2024"])
+            
+        quarter = st.selectbox("רבעון", ["Q1", "Q2", "Q3", "Q4"])
         
-        # בניית הנתיב לקובץ
-        # מחפש בתיקיית Financial_Reports
+        # נתיב חיפוש
         search_path = os.path.join(base_path, company, year, quarter, "Financial_Reports")
         
         if os.path.exists(search_path):
             files = [f for f in os.listdir(search_path) if f.endswith(".pdf")]
             if files:
-                selected_filename = st.selectbox("בחר דוח", files)
+                selected_filename = st.selectbox("בחר דוח PDF", files)
                 selected_file_path = os.path.join(search_path, selected_filename)
-                st.success(f"נמצא: {selected_filename}")
             else:
-                st.warning("לא נמצאו קבצי PDF בתיקייה זו")
+                st.warning("לא נמצאו קבצים בתיקייה זו")
         else:
-            st.warning("הנתיב לא קיים (עדיין לא הועלו דוחות לרבעון זה)")
-            
+            st.warning("טרם הועלו דוחות לתקופה זו")
     else:
-        st.info("לא נמצאה תיקיית 'Insurance_Warehouse'. המערכת עוברת למצב העלאה ידנית.")
-        uploaded_user_file = st.file_uploader("העלה דוח ידנית", type=['pdf'])
+        st.info("מצב ידני (לא נמצא ארכיון)")
+        uploaded_user_file = st.file_uploader("העלה דוח", type=['pdf'])
 
-# --- 8. לוגיקה ראשית ---
-# משתמשים בקובץ מהספרייה או בקובץ שהועלה ידנית
-final_file_path = None
+# --- 8. לוגיקה חכמה לטעינת קובץ (מונעת ניתוקים) ---
+current_file = None
 
-if selected_file_path:
-    final_file_path = selected_file_path
-elif 'uploaded_user_file' in locals() and uploaded_user_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_user_file.getvalue())
-        final_file_path = tmp_file.name
+# קביעת הקובץ הסופי לעבודה
+final_path_to_process = selected_file_path
+if not final_path_to_process and 'uploaded_user_file' in locals() and uploaded_user_file:
+    # טיפול בקובץ ידני
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_user_file.getvalue())
+        final_path_to_process = tmp.name
 
-# אם יש קובץ (מהספרייה או ידני) - מתחילים לעבוד
-if final_file_path:
+# מנגנון טעינה אוטומטי (Auto-Load)
+if final_path_to_process:
+    # אם החלפנו קובץ, או שאין קובץ בזיכרון - נעלה חדש
+    if "current_file_path" not in st.session_state or st.session_state.current_file_path != final_path_to_process:
+        with st.spinner(f'מנתח את הדוח: {os.path.basename(final_path_to_process)}...'):
+            try:
+                gemini_file = upload_to_gemini(final_path_to_process)
+                st.session_state.gemini_file = gemini_file
+                st.session_state.current_file_path = final_path_to_process
+                st.session_state.chat_history = [] # איפוס צ'אט כשמחליפים דוח
+                st.success("✅ הדוח נטען ומוכן לניתוח")
+            except Exception as e:
+                st.error(f"שגיאה בטעינת הקובץ: {e}")
+    
+    # שליפה מהזיכרון
+    if "gemini_file" in st.session_state:
+        current_file = st.session_state.gemini_file
+
+# --- 9. אזור הצ'אט ---
+if current_file:
+    # הצגת היסטוריה
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # כפתור להתחלת ניתוח
-    if st.button("🚀 התחל ניתוח לדוח זה"):
-        try:
-            with st.spinner('שולח למודל Gemini Pro...'):
-                gemini_file = upload_to_gemini(final_file_path)
-                wait_for_files_active([gemini_file])
-                st.session_state.gemini_file = gemini_file
-                st.success("הדוח מוכן לשאלות!")
-        except Exception as e:
-            st.error(f"שגיאה: {e}")
-
-    # אזור הצ'אט
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["content"])
 
-    if prompt := st.chat_input("שאל משהו על הדוח..."):
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
+    # קלט משתמש
+    if prompt := st.chat_input("שאל שאלה על הדוח (למשל: מה הרווח הכולל?)..."):
         st.chat_message("user").write(prompt)
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
 
-        if "gemini_file" in st.session_state:
-            with st.chat_message("assistant"):
-                with st.spinner('חושב...'):
-                    response = model.generate_content([st.session_state.gemini_file, prompt])
+        with st.chat_message("assistant"):
+            with st.spinner('מעבד נתונים...'):
+                try:
+                    # כאן התיקון הגדול - טיפול בשגיאת התנתקות
+                    response = model.generate_content([current_file, prompt])
                     st.write(response.text)
                     st.session_state.chat_history.append({"role": "assistant", "content": response.text})
-        else:
-            st.warning("נא ללחוץ על 'התחל ניתוח' קודם.")
+                
+                except google.api_core.exceptions.NotFound:
+                    # אם הקובץ התנתק, ננסה להעלות אותו שוב אוטומטית בפעם הבאה
+                    st.error("⚠️ הקשר עם הקובץ אבד (Time out). המערכת תטען אותו מחדש אוטומטית.")
+                    # מחיקת הזיכרון כדי לכפות טעינה מחדש בלחיצה הבאה
+                    del st.session_state['current_file_path']
+                    st.rerun() # רענון אוטומטי לטעינה מחדש
+                
+                except Exception as e:
+                    st.error(f"אירעה שגיאה: {e}")
 
 else:
-    st.info("👈 בחר דוח מהספרייה בצד ימין (או העלה קובץ ידנית) כדי להתחיל.")
+    st.info("👈 בחר דוח מהתפריט בצד ימין כדי להתחיל.")
