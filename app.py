@@ -2,30 +2,38 @@ import streamlit as st
 import google.generativeai as genai
 import sys
 
-st.set_page_config(page_title="בדיקת טכנאי", direction="rtl")
-st.title("🛠️ בדיקת גרסה ומנוע")
+# --- 1. הגדרת דף (הגרסה המתוקנת ללא שגיאות) ---
+st.set_page_config(page_title="בדיקת גרסה", layout="wide")
 
-# 1. בדיקת גרסת הספרייה (האם השדרוג הצליח?)
+# עיצוב לימין (בצורה התקינה)
+st.markdown("""<style>.stApp {direction: rtl;} h1, h2, p {text-align: right;}</style>""", unsafe_allow_html=True)
+
+st.title("🛠️ בדיקת מנוע")
+
+# --- 2. בדיקת גרסת הספרייה ---
 try:
     current_version = genai.__version__
-    st.metric(label="גרסת המנוע (google-generativeai)", value=current_version)
+    st.metric(label="גרסת המנוע המותקנת (google-generativeai)", value=current_version)
 
     st.write("---")
 
-    # בדיקה האם הגרסה תקינה
-    if current_version >= "0.7.0":
-        st.success("✅ **חדשות טובות:** הגרסה מעודכנת! הקובץ requirements.txt נקלט בהצלחה.")
+    # בדיקה האם הגרסה תקינה (חייבת להיות 0.7.0 ומעלה)
+    # המרת הגרסה למספרים להשוואה
+    major, minor, patch = map(int, current_version.split('.')[:3])
+    
+    if (major == 0 and minor >= 7) or major >= 1:
+        st.success("✅ **חדשות טובות:** הגרסה מעודכנת! (0.7.0 ומעלה)")
         version_ok = True
     else:
-        st.error(f"❌ **הבעיה נמצאה:** הגרסה המותקנת היא `{current_version}` (ישנה מדי).")
-        st.info("הפתרון: השרת עדיין לא ביצע את העדכון שביקשת. צריך לעשות Reboot App שוב.")
+        st.error(f"❌ **הבעיה נמצאה:** הגרסה היא `{current_version}` (ישנה מדי).")
+        st.info("זה אומר שהקובץ requirements.txt לא נקלט. צריך לעשות Reboot.")
         version_ok = False
 
 except Exception as e:
-    st.error("לא הצלחתי לבדוק את הגרסה.")
+    st.error(f"לא הצלחתי לבדוק גרסה: {e}")
     version_ok = False
 
-# 2. בדיקת חיבור למודל (רק אם הגרסה תקינה)
+# --- 3. בדיקת חיבור למודל (רק אם הגרסה תקינה) ---
 if version_ok:
     st.write("בדיקת חיבור למודל Flash...")
     api_key = st.secrets.get("GOOGLE_API_KEY")
