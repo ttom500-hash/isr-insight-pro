@@ -6,121 +6,96 @@ import time
 
 # --- 1. הגדרת דף ---
 st.set_page_config(page_title="Apex Pro", layout="wide")
-
-# --- 2. עיצוב RTL ---
-st.markdown("""
-<style>
-    .stApp { direction: rtl; }
-    h1, h2, h3, p, div { text-align: right; }
-    .stTextInput > div > div > input { text-align: right; }
-    .stChatMessage { direction: rtl; text-align: right; }
-    p { text-align: right; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("""<style>.stApp {direction: rtl;} h1, h2, h3, p, div {text-align: right;} 
+.stTextInput>div>div>input {text-align: right;} .stChatMessage {direction: rtl; text-align: right;}</style>""", unsafe_allow_html=True)
 
 st.title("🏢 Apex Pro - אנליסט חכם")
 
-# --- 3. חיבור לגוגל ---
-api_key = st.secrets.get("GOOGLE_API_KEY")
+# --- 2. מנגנון איתור מפתח חכם 🕵️‍♂️ ---
+api_key = None
+# ניסיון 1: השם הרשמי
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+# ניסיון 2: השם הישן
+elif "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
 
+# בדיקה האם נמצא מפתח
 if not api_key:
-    st.error("❌ חסר מפתח ב-Secrets.")
+    st.error("❌ לא נמצא מפתח מתאים ב-Secrets.")
+    st.write("המערכת חיפשה: `GOOGLE_API_KEY` או `GEMINI_API_KEY`")
+    
+    # הצגת מה שכן קיים (כדי לעזור לך למצוא את הטעות)
+    if st.secrets:
+        st.warning("⚠️ המפתחות שכן נמצאו בכספת הם:")
+        st.code(list(st.secrets.keys()))
+        st.info("אם השם שונה, נא לשנות אותו ב-Secrets לשם התקני: GOOGLE_API_KEY")
+    else:
+        st.error("הכספת ריקה לחלוטין! וודא שלחצת על Save.")
+    
     st.stop()
 
-# חיבור ראשוני
+# --- 3. חיבור ואיתור מודל ---
 genai.configure(api_key=api_key)
 
-# --- מנגנון "טייס אוטומטי" למציאת מודל תקין ---
 @st.cache_resource
-def find_working_model():
+def get_model():
+    # רשימת עדיפויות
+    candidates = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
     try:
-        # בקשת רשימת המודלים הזמינים לך
-        models = list(genai.list_models())
-        
-        # חיפוש מודל לפי סדר עדיפות
-        priority_list = [
-            "models/gemini-1.5-flash",
-            "models/gemini-1.5-flash-latest",
-            "models/gemini-1.5-pro",
-            "models/gemini-pro"
-        ]
-        
-        # בדיקה: האם אחד מהמועדפים קיים ברשימה?
-        for priority in priority_list:
-            for m in models:
-                if priority in m.name and 'generateContent' in m.supported_generation_methods:
-                    return m.name # מצאנו!
-        
-        # אם לא מצאנו מועדף, ניקח את הראשון שעובד
-        for m in models:
-            if 'generateContent' in m.supported_generation_methods:
-                return m.name
-                
-        return None
-    except Exception as e:
-        st.error(f"שגיאה באיתור מודלים: {e}")
-        return None
+        my_models = [m.name for m in genai.list_models()]
+        # בדיקה האם המועדפים קיימים
+        for cand in candidates:
+            full_name = f"models/{cand}"
+            if full_name in my_models:
+                return cand
+        return "gemini-1.5-flash" # ברירת מחדל
+    except:
+        return "gemini-1.5-flash"
 
-# בחירת המודל
-model_name = find_working_model()
-
-if model_name:
-    st.caption(f"מחובר למודל: {model_name}")
-    model = genai.GenerativeModel(model_name)
-else:
-    st.error("❌ המפתח תקין, אך לא נמצאו מודלים זמינים בחשבון זה.")
-    st.stop()
+model_name = get_model()
+st.caption(f"מחובר למודל: {model_name}")
+model = genai.GenerativeModel(model_name)
 
 # --- 4. פונקציית העלאה ---
 def upload_file(path):
-    msg = st.toast("מעלה קובץ לענן המאובטח...", icon="⏳")
-    
+    msg = st.toast("מעלה...", icon="⏳")
     try:
         file = genai.upload_file(path, mime_type="application/pdf")
-        
-        # המתנה לעיבוד
         while file.state.name == "PROCESSING":
             time.sleep(1)
             file = genai.get_file(file.name)
-            
         if file.state.name != "ACTIVE":
-            raise Exception(f"העיבוד נכשל (סטטוס: {file.state.name})")
-            
-        msg.toast("הדוח מוכן לעבודה!", icon="✅")
+            raise Exception("עיבוד נכשל")
+        msg.toast("מוכן!", icon="✅")
         return file
     except Exception as e:
-        st.error(f"תקלה בהעלאת הקובץ: {e}")
+        st.error(f"תקלה: {e}")
         return None
 
-# --- 5. צד ימין (בחירת קובץ) ---
+# --- 5. ממשק משתמש ---
 base_path = "data/Insurance_Warehouse"
 selected_file = None
 
 with st.sidebar:
-    st.header("מקור הנתונים")
-    mode = st.radio("בחר:", ["ארכיון (GitHub)", "העלאה ידנית"])
-    
-    if mode == "ארכיון (GitHub)":
+    st.header("נתונים")
+    mode = st.radio("מקור:", ["GitHub", "העלאה ידנית"])
+    if mode == "GitHub":
         if os.path.exists(base_path):
-            companies = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
-            if companies:
-                comp = st.selectbox("חברה", companies)
-                y_path = os.path.join(base_path, comp)
-                years = [d for d in os.listdir(y_path) if os.path.isdir(os.path.join(y_path, d))] if os.path.exists(y_path) else ["2025"]
-                year = st.selectbox("שנה", years)
-                q = st.selectbox("רבעון", ["Q1", "Q2", "Q3", "Q4"])
-                
-                final_dir = os.path.join(base_path, comp, year, q, "Financial_Reports")
-                if os.path.exists(final_dir):
-                    files = [f for f in os.listdir(final_dir) if f.endswith(".pdf")]
-                    if files:
-                        fname = st.selectbox("דוח", files)
-                        selected_file = os.path.join(final_dir, fname)
-                    else: st.warning("אין קבצים")
-                else: st.warning("תיקייה ריקה")
-        else: st.error("תיקיית data לא נמצאה")
+            comp = st.selectbox("חברה", os.listdir(base_path))
+            # זיהוי שנה
+            yp = os.path.join(base_path, comp)
+            years = [d for d in os.listdir(yp) if os.path.isdir(os.path.join(yp, d))] if os.path.exists(yp) else ["2025"]
+            year = st.selectbox("שנה", years)
+            q = st.selectbox("רבעון", ["Q1", "Q2", "Q3", "Q4"])
+            final_dir = os.path.join(base_path, comp, year, q, "Financial_Reports")
+            if os.path.exists(final_dir):
+                files = [f for f in os.listdir(final_dir) if f.endswith(".pdf")]
+                if files:
+                    fname = st.selectbox("דוח", files)
+                    selected_file = os.path.join(final_dir, fname)
     else:
-        up = st.file_uploader("גרור PDF", type=['pdf'])
+        up = st.file_uploader("PDF", type=['pdf'])
         if up:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as t:
                 t.write(up.getvalue())
@@ -128,33 +103,30 @@ with st.sidebar:
 
 # --- 6. צ'אט ---
 if selected_file:
-    if "curr_file" not in st.session_state or st.session_state.curr_file != selected_file:
-        st.session_state.g_file = upload_file(selected_file)
-        if st.session_state.g_file:
-            st.session_state.curr_file = selected_file
-            st.session_state.history = []
+    if "curr" not in st.session_state or st.session_state.curr != selected_file:
+        st.session_state.gf = upload_file(selected_file)
+        if st.session_state.gf:
+            st.session_state.curr = selected_file
+            st.session_state.hist = []
 
-    for msg in st.session_state.get("history", []):
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+    for m in st.session_state.get("hist", []):
+        st.chat_message(m["role"]).write(m["content"])
 
-    if prompt := st.chat_input("שאל שאלה..."):
-        with st.chat_message("user"):
-            st.write(prompt)
-        st.session_state.history.append({"role": "user", "content": prompt})
-
-        if "g_file" in st.session_state:
-            with st.chat_message("assistant"):
-                with st.spinner("מעבד..."):
-                    try:
-                        response = model.generate_content([st.session_state.g_file, prompt], stream=True)
-                        full_text = ""
-                        ph = st.empty()
-                        for chunk in response:
-                            if chunk.text:
-                                full_text += chunk.text
-                                ph.markdown(full_text + "▌")
-                        ph.markdown(full_text)
-                        st.session_state.history.append({"role": "assistant", "content": full_text})
-                    except Exception as e:
-                        st.error(f"שגיאה: {e}")
+    if p := st.chat_input("שאל שאלה..."):
+        st.chat_message("user").write(p)
+        st.session_state.hist.append({"role": "user", "content": p})
+        
+        with st.chat_message("assistant"):
+            with st.spinner("חושב..."):
+                try:
+                    res = model.generate_content([st.session_state.gf, p], stream=True)
+                    full = ""
+                    ph = st.empty()
+                    for c in res:
+                        if c.text:
+                            full += c.text
+                            ph.markdown(full + "▌")
+                    ph.markdown(full)
+                    st.session_state.hist.append({"role": "assistant", "content": full})
+                except Exception as e:
+                    st.error(str(e))
