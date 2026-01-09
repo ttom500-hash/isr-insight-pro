@@ -1,86 +1,66 @@
 import streamlit as st
 import google.generativeai as genai
-import tempfile
 import os
 import time
-from datetime import datetime
 
-# --- 1. הגדרות מערכת ועיצוב ---
-st.set_page_config(page_title="Apex Pro Enterprise", page_icon="🏢", layout="wide")
-
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&display=swap');
-    .stApp { direction: rtl; font-family: 'Heebo', sans-serif; text-align: right; }
-    .methodology-box { background-color: #e3f2fd; border-right: 5px solid #2196f3; padding: 15px; border-radius: 5px; margin: 10px 0; }
-    .alert-box { background-color: #ffebee; border-right: 5px solid #f44336; padding: 15px; border-radius: 5px; margin: 10px 0; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- 2. מנוע איתור מפתח (פותר את השגיאה הקריטית) ---
-def get_api_key():
-    # בודק את כל השמות האפשריים שסיפקת ב-Secrets
-    return st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or st.secrets.get("A")
-
-api_key = get_api_key()
-
-if not api_key or api_key == "1": # בדיקה אם זה רק טקסט זמני
-    st.error("⛔ שגיאה קריטית: לא נמצא מפתח API תקין ב-Secrets.")
-    st.info("אנא ודא שב-Secrets מופיע: GOOGLE_API_KEY = 'המפתח_שלך'")
-    st.stop()
-
+# --- 1. הגדרות וחיבור (המנוע) ---
+st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
+api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-@st.cache_resource
-def load_model():
-    # איתור אוטומטי של המודל הזמין (Flash 1.5)
-    try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        best_model = next((m for m in models if "flash" in m), models[0])
-        return genai.GenerativeModel(best_model, system_instruction="אתה אקטואר ורגולטור ביטוח בכיר. נתח דוחות לפי IFRS 17 ו-Solvency II.")
-    except:
-        return genai.GenerativeModel("gemini-1.5-flash")
+# --- 2. מנוע סריקת קבצים (הפתרון לתיקייה הריקה) ---
+BASE_DIR = "data/Insurance_Warehouse"
 
-model = load_model()
+def get_hierarchy():
+    hierarchy = {}
+    if os.path.exists(BASE_DIR):
+        for company in os.listdir(BASE_DIR):
+            c_path = os.path.join(BASE_DIR, company)
+            if os.path.isdir(c_path):
+                hierarchy[company] = {}
+                for year in os.listdir(c_path):
+                    y_path = os.path.join(c_path, year)
+                    if os.path.isdir(y_path):
+                        hierarchy[company][year] = ["Q1", "Q2", "Q3", "Q4"]
+    return hierarchy
 
-# --- 3. 5 המדדים הקריטיים מהזיכרון ---
-# מדדים אלו נשמרו בזיכרון המערכת לשימוש חוזר [cite: 2026-01-03]
-KPI_PROMPT = """
-נתח את 5 המדדים הקריטיים הבאים [cite: 2026-01-03]:
-1. יחס כושר פירעון (Solvency Ratio) - השווה לדרישות ההון.
-2. רווחיות להון (ROE) - נתח את איכות הרווח הנקי.
-3. Combined Ratio - יעילות חיתומית.
-4. מרווח CSM חדש - צמיחת ערך לפי IFRS 17.
-5. יחס נזילות - יכולת פירעון מיידית.
-עבור כל מדד: הצג מספר, מתודולוגיה, ודגלים אדומים 🚩.
-"""
-
-# --- 4. ממשק משתמש ---
+# --- 3. ממשק צד (ניווט) ---
 with st.sidebar:
-    st.title("📂 ארכיון נתונים")
-    # לוגיקה לבחירת דוח (GitHub/Manual)
-    # ... (כאן מגיע הקוד של בחירת הקבצים מה-Warehouse)
+    st.header("📂 ארכיון נתונים")
+    data_map = get_hierarchy()
+    
+    if data_map:
+        comp = st.selectbox("בחר חברה:", list(data_map.keys()))
+        year = st.selectbox("בחר שנה:", list(data_map[comp].keys()))
+        q = st.selectbox("בחר רבעון:", data_map[comp][year])
+        
+        # נתיב לקובץ ה-PDF
+        report_dir = os.path.join(BASE_DIR, comp, year, q, "Financial_Reports")
+        if os.path.exists(report_dir):
+            files = [f for f in os.listdir(report_dir) if f.endswith(".pdf")]
+            selected_file = st.selectbox("בחר דוח לניתוח:", files)
+            full_path = os.path.join(report_dir, selected_file)
+        else:
+            st.warning("לא נמצאו דוחות בנתיב זה.")
+            full_path = None
+    else:
+        st.error("תיקיית data לא נמצאה ב-GitHub.")
+        full_path = None
 
+# --- 4. גוף האפליקציה (התוכן) ---
 st.title("🏢 Apex Pro - דשבורד אנליסט ומפקח")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 ניתוח IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים", "💬 צ'אט מומחה"])
-
-with tab1:
-    st.subheader("ניתוח עומק תקן IFRS 17")
-    if st.button("נתח תנועת CSM ומודלים (GMM/VFA)"):
-        # הפעלת ניתוח...
-        pass
-
-with tab2:
-    st.subheader("סימולציית תרחישי קיצון (Solvency II)")
-    scenario = st.selectbox("בחר תרחיש:", ["רעידת אדמה", "עליית ריבית חדה", "קריסת שווקים", "ביטולים המוניים"])
-    if st.button("הרץ מבחן לחץ"):
-        # הפעלת ניתוח...
-        pass
-
-with tab3:
-    st.subheader("בדיקת 5 מדדי ה-KPI הקריטיים")
-    st.info("בדיקה זו מבוססת על הצ'קליסט השמור בזיכרון האנליסט [cite: 2026-01-03].")
-    if st.button("הפעל ניתוח KPIs"):
-        # שימוש ב-KPI_PROMPT
-        pass
+if full_path:
+    # כאן נכנסת הלוגיקה של הטאבים (IFRS 17, סולבנסי, 5 המדדים)
+    tab1, tab2, tab3 = st.tabs(["📊 ניתוח IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
+    
+    with tab3:
+        st.subheader("בדיקת 5 מדדי ה-KPI הקריטיים")
+        if st.button("הפעל ניתוח אקטוארי סופי"):
+            # פקודה למודל לנתח לפי הזיכרון שלנו
+            prompt = "נתח את יחס הסולבנסי, ROE, Combined Ratio, CSM ונזילות." [cite: 2026-01-03]
+            # (כאן מבוצעת הקריאה ל-Gemini)
+            st.write(f"מנתח את הקובץ: {selected_file}...")
+else:
+    st.info("אנא בחר דוח מהתפריט הימני כדי להציג נתונים.")
