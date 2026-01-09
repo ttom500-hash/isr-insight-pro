@@ -28,7 +28,7 @@ ai_ready = initialize_ai()
 @st.cache_resource
 def get_stable_model():
     if not ai_ready: return None, "None"
-    # תיקון שגיאת 404: שימוש בשם המודל התקני ביותר לסביבת v1beta בענן
+    # שם המודל התקני ביותר למניעת שגיאות 404
     model_name = 'gemini-1.5-flash' 
     try:
         return genai.GenerativeModel(model_name), model_name
@@ -51,23 +51,21 @@ def get_verified_paths(company, year, quarter):
     return fin_files, sol_files
 
 def extract_deep_context(pdf_path):
-    """סריקה עמוקה: מחלץ טקסט מ-50 דפים ותמונות מ-5 דפים ראשונים לניתוח הון עצמי"""
+    """חילוץ טקסט מ-50 דפים ותמונות מ-5 דפים ראשונים לאיתור נתוני מאזן"""
     full_text = ""
     preview_images = []
     try:
         doc = fitz.open(pdf_path)
         for i in range(min(len(doc), 50)):
-            # חילוץ טקסט (OCR פנימי) למציאת נתונים בטבלאות
             full_text += f"\n[Page {i+1}]\n" + doc[i].get_text()
             if i < 5:
-                # יצירת צילום דף לניתוח ויזואלי (Vision)
                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(2, 2))
                 preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
         return full_text, preview_images
     except Exception as e:
         return f"Error: {e}", []
 
-# מסד הנתונים של השוק (KPI Checklist)
+# נתוני שוק בסיסיים ו-KPIs (5 המדדים הקריטיים)
 market_df = pd.DataFrame({
     "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "Solvency %": [184, 172, 175, 158, 149],
@@ -79,22 +77,22 @@ market_df = pd.DataFrame({
 })
 
 # ==========================================
-# 3. SIDEBAR - AUTOMATED RADAR
+# 3. SIDEBAR - CONTROL RADAR
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
-    sel_comp = st.selectbox("בחר חברה לניתוח:", market_df["חברה"])
-    sel_year = st.selectbox("שנה פיסקאלית:", [2024, 2025, 2026])
-    sel_q = st.select_slider("רבעון דיווח:", options=["Q1", "Q2", "Q3", "Q4"])
+    sel_comp = st.selectbox("בחר חברה:", market_df["חברה"])
+    sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
+    sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
     fin_paths, sol_paths = get_verified_paths(sel_comp, sel_year, sel_q)
     
     st.divider()
     if fin_paths:
-        st.success(f"✅ דוח כספי זוהה: {os.path.basename(fin_paths[0])[:15]}...")
+        st.success(f"✅ דוח כספי זוהה")
     else:
-        st.warning("❌ דוח כספי לא נמצא בנתיב")
-    st.caption(f"AI Core: {active_model_name}")
+        st.warning("❌ דוח לא נמצא")
+    st.caption(f"AI Engine: {active_model_name}")
 
 # ==========================================
 # 4. MAIN TERMINAL
@@ -119,7 +117,7 @@ with tabs[0]:
     with c1:
         st.plotly_chart(px.bar(market_df, x="חברה", y="CSM (B₪)", color="חברה", title="השוואת עתודות רווח (CSM)"), use_container_width=True)
     with c2:
-        st.plotly_chart(px.pie(values=[60, 25, 15], names=["Life", "Health", "P&C"], title="תמהיל רווח לפי מגזרים"), use_container_width=True)
+        st.plotly_chart(px.pie(values=[60, 25, 15], names=["Life", "Health", "P&C"], title="Profit Mix"), use_container_width=True)
 
 # --- TAB 2: IFRS 17 ENGINE ---
 with tabs[1]:
@@ -131,10 +129,6 @@ with tabs[1]:
     ))
     st.plotly_chart(fig_wf, use_container_width=True)
     
-    m1, m2, m3 = st.columns(3)
-    m1.info("**VFA Approach**\n\nVariable Fee: חיסכון ארוך טווח")
-    m2.success("**GMM Approach**\n\nGeneral Model: סיעוד וחיים")
-    m3.warning("**PAA Approach**\n\nPremium Allocation: אלמנטר ובריאות")
 
 # --- TAB 3: FINANCIAL RATIOS ---
 with tabs[2]:
@@ -158,32 +152,33 @@ with tabs[3]:
     new_sol = row['Solvency %'] + impact
     st.metric("Solvency לאחר קיצון", f"{new_sol:.1f}%", delta=f"{impact:.1f}%")
 
-# --- TAB 5: AI HYBRID RESEARCH ---
+# --- TAB 5: AI DEEP RESEARCH ---
 with tabs[4]:
     st.subheader("🤖 AI Hybrid Analyst (Vision + Deep Text Scan)")
     if fin_paths:
-        query = st.text_input("שאל שאלה מקצועית (למשל: 'מהו ההון העצמי המיוחס לבעלי המניות?'):")
-        if query and ai_ready:
-            with st.spinner("סורק את כל הדוח ומצליב נתונים..."):
+        query = st.text_input("שאל שאלה (למשל: 'מהו ההון העצמי במאזן?'):")
+        analyze_btn = st.button("🚀 הרץ ניתוח עמוק")
+        
+        if analyze_btn and query and ai_ready:
+            with st.spinner("סורק את דפי המאזן ומנתח נתונים..."):
                 try:
                     full_text, pages = extract_deep_context(fin_paths[0])
-                    with st.expander("צפה בדפים שנסרקו על ידי ה-AI"):
+                    with st.expander("צפה בדפים שנסרקו"):
                         cols = st.columns(len(pages))
                         for idx, p in enumerate(pages): cols[idx].image(p, use_container_width=True)
                     
-                    # פרומפט היברידי המשלב טקסט מלא (עד דף 50) עם ה-Vision של דף השער
                     prompt = f"""
-                    אתה אנליסט ביטוח בכיר. נתח את הטקסט והתמונות המצורפים מהדוח הכספי וענה בעברית מקצועית ומדויקת.
-                    משימה: חפש בטקסט שחולץ (50 דפים) את המילים 'הון עצמי' או 'בעלי מניות' בטבלאות המאזן.
+                    אתה אנליסט ביטוח בכיר. נתח את הטקסט והתמונות מהדוח הכספי.
+                    משימה: מצא בטקסט שחולץ (50 דפים) את נתוני המאזן (Balance Sheet).
+                    ענה בעברית מקצועית על השאלה: {query}
                     
-                    השאלה: {query}
-                    
-                    טקסט מחולץ מהדוח:
+                    טקסט מחולץ:
                     {full_text[:15000]}
                     """
                     response = ai_model.generate_content([prompt, pages[0]])
                     st.markdown("### 📝 תשובת האנליסט:")
                     st.write(response.text)
-                except Exception as e: st.error(f"שגיאה בניתוח: {e}")
-    else: st.warning("⚠️ לא נמצא דוח PDF לסריקה אוטומטית.")
-        
+                except Exception as e:
+                    st.error(f"שגיאה: {e}")
+    else:
+        st.warning("⚠️ לא נמצא דוח PDF לסריקה.")
