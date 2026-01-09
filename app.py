@@ -1,38 +1,52 @@
 import os
 import streamlit as st
-import google.generativeai as genai
 import fitz  # PyMuPDF
+import requests # ספריה לתקשורת ישירה ללא תלות בגרסאות AI
+import json
 
 # ==========================================
-# 1. הגדרות מערכת וחיבור AI
+# 1. הגדרות מערכת
 # ==========================================
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-def init_ai():
-    # הגדרת המודל החדש בגרסה יציבה
-    if "GEMINI_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        return genai.GenerativeModel('gemini-1.5-flash')
-    return None
-
-model = init_ai()
+# פונקציה שעוקפת את הספריה הבעייתית ופונה ישירות לגוגל
+def ask_gemini_direct(prompt):
+    if "GEMINI_API_KEY" not in st.secrets:
+        return "Error: Missing API Key"
+    
+    api_key = st.secrets["GEMINI_API_KEY"]
+    # פנייה ישירה לכתובת ה-API של גוגל (Bypass)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Error {response.status_code}: {response.text}"
+    except Exception as e:
+        return f"Connection Error: {str(e)}"
 
 # ==========================================
-# 2. מנוע איתור קבצים חכם (מתגבר על כפילויות)
+# 2. מנוע איתור קבצים (החלק שעבד מצוין)
 # ==========================================
 def find_file_smart(base_path, file_prefix):
-    """מוצא קובץ שמתחיל בשם הנכון, גם אם יש לו סיומת כפולה"""
     if not os.path.exists(base_path):
         return None
-    
     for f in os.listdir(base_path):
-        # בדיקה: מתחיל בשם החברה ומסתיים ב-pdf (לא משנה כמה פעמים)
         if f.lower().startswith(file_prefix.lower()) and ".pdf" in f.lower():
             return os.path.join(base_path, f)
     return None
 
 # ==========================================
-# 3. תפריט צד (Sidebar)
+# 3. SIDEBAR
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -40,12 +54,11 @@ with st.sidebar:
     year = st.selectbox("שנה:", [2024, 2025, 2026])
     q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # בדיקת נתיבים (תומך ב-Data ו-data)
+    # בדיקת נתיבים
     base_dir = f"data/Insurance_Warehouse/{comp}/{year}/{q}"
     if not os.path.exists(base_dir):
         base_dir = f"Data/Insurance_Warehouse/{comp}/{year}/{q}"
 
-    # איתור הקבצים
     fin_path = find_file_smart(f"{base_dir}/Financial_Reports", f"{comp}_{q}_{year}")
     sol_path = find_file_smart(f"{base_dir}/Solvency_Reports", f"Solvency_{comp}_{q}_{year}")
     
@@ -59,36 +72,40 @@ st.title(f"🏛️ {comp} | Strategic AI Terminal")
 t1, t2 = st.tabs(["📊 KPI Dashboard", "🤖 AI Analyst"])
 
 with t2:
-    st.subheader("ניתוח דוחות עמוק")
+    st.subheader("ניתוח דוחות (Direct Connection Mode)")
     mode = st.radio("בחר דוח:", ["כספי", "סולבנסי"])
     active_path = fin_path if mode == "כספי" else sol_path
     
     if active_path:
-        st.success(f"מנתח את: {os.path.basename(active_path)}")
-        query = st.text_input("שאל את האנליסט (למשל: מהו ההון העצמי?):")
+        st.success(f"קובץ בטיפול: {os.path.basename(active_path)}")
+        query = st.text_input("הכנס שאלה (למשל: מהו ההון העצמי?):")
         
         if st.button("🚀 הרץ ניתוח") and query:
-            if model:
-                with st.spinner("סורק דפי מאזן ומחלץ נתונים..."):
-                    try:
-                        doc = fitz.open(active_path)
-                        # חילוץ טקסט מ-40 עמודים ראשונים
-                        text = "".join([page.get_text() for page in doc[:40]])
+            with st.spinner("מבצע סריקה ישירה מול השרתים של גוגל..."):
+                try:
+                    # חילוץ טקסט
+                    doc = fitz.open(active_path)
+                    text = "".join([page.get_text() for page in doc[:40]])
+                    
+                    # בניית הפרומפט
+                    full_prompt = f"""
+                    אתה אנליסט מומחה. ענה על השאלה הבאה בהתבסס על הטקסט המצורף מדוח כספי.
+                    שאלה: {query}
+                    
+                    טקסט מהדוח:
+                    {text[:20000]}
+                    """
+                    
+                    # שימוש בפונקציה הישירה
+                    result = ask_gemini_direct(full_prompt)
+                    
+                    st.markdown("---")
+                    if "Error" in result:
+                        st.error(result)
+                    else:
+                        st.success(result)
                         
-                        prompt = f"""
-                        אתה מומחה IFRS 17. נתח את הדוח המצורף של חברת {comp}.
-                        שאלה: {query}
-                        
-                        התמקד בנתונים מספריים מדויקים (הון עצמי, CSM, סולבנסי).
-                        טקסט מהדוח:
-                        {text[:20000]}
-                        """
-                        response = model.generate_content(prompt)
-                        st.markdown("---")
-                        st.write(response.text)
-                    except Exception as e:
-                        st.error(f"שגיאה בניתוח: {e}")
-            else:
-                st.error("שגיאת מפתח API - בדוק Secrets")
+                except Exception as e:
+                    st.error(f"תקלה בקריאת הקובץ: {e}")
     else:
-        st.warning("לא נמצא קובץ מתאים ב-GitHub.")
+        st.warning("לא נמצא קובץ. בדוק את התיקיות ב-GitHub.")
