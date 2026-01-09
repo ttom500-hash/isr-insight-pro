@@ -14,7 +14,6 @@ import io
 st.set_page_config(page_title="Apex Pro Enterprise | Strategic AI Terminal", layout="wide")
 
 def initialize_ai():
-    """בדיקה וחיבור למנוע ה-AI באמצעות המפתח ב-Secrets"""
     try:
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
@@ -29,11 +28,8 @@ ai_ready = initialize_ai()
 
 @st.cache_resource
 def get_stable_model():
-    """טעינת מודל יציב למניעת שגיאות 404"""
     if not ai_ready:
         return None, "Missing API Key"
-    
-    # שימוש בשם המודל התקני ביותר עבור Streamlit Cloud
     model_name = 'gemini-1.5-flash'
     try:
         model = genai.GenerativeModel(model_name)
@@ -47,54 +43,46 @@ ai_model, active_model_name = get_stable_model()
 # 2. PDF DEEP SCAN ENGINE
 # ==========================================
 def extract_deep_context(pdf_path):
-    """סריקה של עד 50 דפים לחילוץ נתונים פיננסיים עמוקים (מאזן)"""
     full_text = ""
     preview_images = []
     try:
         doc = fitz.open(pdf_path)
-        total_pages = len(doc)
-        # סריקת טקסט מ-50 דפים ראשונים (שם נמצא המאזן בדרך כלל)
-        for i in range(min(total_pages, 50)):
+        for i in range(min(len(doc), 50)):
             full_text += f"\n--- Page {i+1} ---\n" + doc[i].get_text()
-            # שמירת תמונות מ-5 דפים ראשונים לאישור ויזואלי של המשתמש
             if i < 5:
                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
                 preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
         return full_text, preview_images
     except Exception as e:
-        return f"Error extracting PDF: {e}", []
+        return f"Error: {e}", []
 
 # ==========================================
-# 3. DATA WAREHOUSE (נתוני שוק השוואתיים)
+# 3. DATA WAREHOUSE - נקי מתווי שקל בקוד
 # ==========================================
 market_df = pd.DataFrame({
-    "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
-    "Solvency %": [184, 172, 175, 158, 149],
-    "ROE %": [14.1, 11.8, 12.5, 10.2, 10.4],
-    "CSM (B₪)": [14.8, 14.1, 9.7, 11.2, 11.5]
+    "company": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
+    "solvency": [184, 172, 175, 158, 149],
+    "roe": [14.1, 11.8, 12.5, 10.2, 10.4],
+    "csm": [14.8, 14.1, 9.7, 11.2, 11.5]
 })
 
 # ==========================================
-# 4. SIDEBAR - CONTROL PANEL
+# 4. SIDEBAR
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
-    sel_comp = st.selectbox("בחר חברה לניתוח:", market_df["חברה"])
-    sel_year = st.selectbox("שנת דוח:", [2024, 2025, 2026])
-    sel_q = st.select_slider("רבעון פיסקאלי:", options=["Q1", "Q2", "Q3", "Q4"])
+    sel_comp = st.selectbox("בחר חברה:", market_df["company"])
+    sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
+    sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    st.divider()
-    # הדמיית נתיב קובץ - וודא שהתיקיות קיימות ב-GitHub שלך
+    # הגדרת נתיב הקובץ
     pdf_file_path = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}/Financial_Reports/{sel_comp}_{sel_q}_{sel_year}.pdf"
+    file_ready = os.path.exists(pdf_file_path)
     
-    if os.path.exists(pdf_file_path):
-        st.success("✅ דוח PDF זוהה במערכת")
-        file_ready = True
+    if file_ready:
+        st.success("✅ דוח זוהה")
     else:
-        st.warning("⚠️ דוח לא נמצא בנתיב המבוקש")
-        file_ready = False
-        
-    st.info(f"AI Model: {active_model_name}")
+        st.warning("⚠️ דוח לא נמצא")
 
 # ==========================================
 # 5. MAIN INTERFACE
@@ -103,53 +91,45 @@ st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
 
 tabs = st.tabs(["📊 KPI Dashboard", "🤖 AI Deep Research"])
 
-# --- TAB 1: KPI Dashboard ---
 with tabs[0]:
-    row = market_df[market_df["חברה"] == sel_comp].iloc[0]
-    st.subheader("מדדי ליבה (מתוך ה-Data Warehouse)")
+    row = market_df[market_df["company"] == sel_comp].iloc[0]
+    st.subheader("מדדי ליבה")
     k1, k2, k3 = st.columns(3)
-    k1.metric("Solvency Ratio", f"{row['Solvency %']}%")
-    k2.metric("ROE (תשואה להון)", f"{row['ROE %']}%")
-    k3.metric("CSM (מיליארדי ש"ח)", f"₪{row['CSM (B₪)']}B")
+    k1.metric("Solvency Ratio", f"{row['solvency']}%")
+    k2.metric("ROE", f"{row['roe']}%")
+    # החלפת סימן השקל במילה "NIS" למניעת שגיאת Syntax
+    k3.metric("CSM Balance", f"NIS {row['csm']}B")
     
-    st.plotly_chart(px.bar(market_df, x="חברה", y="Solvency %", color="חברה", title="השוואת יחסי כושר פירעון בענף"), use_container_width=True)
+    st.plotly_chart(px.bar(market_df, x="company", y="solvency", color="company"), use_container_width=True)
 
-# --- TAB 2: AI DEEP RESEARCH (החלק שסורק את ההון העצמי) ---
 with tabs[1]:
-    st.subheader("🤖 אנליסט AI - סריקה עמוקה של דוחות")
-    
+    st.subheader("🤖 אנליסט AI - סריקה עמוקה")
     if file_ready:
-        query = st.text_input("שאל שאלה מקצועית (למשל: 'מהו ההון העצמי המיוחס לבעלי המניות?'):")
+        query = st.text_input("שאל שאלה על ההון העצמי או ה-CSM:")
         analyze_btn = st.button("🚀 הרץ ניתוח עמוק")
         
         if analyze_btn and query:
-            if not ai_ready or ai_model is None:
-                st.error("❌ השגיאה נמשכת: ה-API Key לא הוגדר כראוי ב-Secrets.")
+            if ai_model is None:
+                st.error("בדוק את ה-API Key ב-Secrets")
             else:
-                with st.spinner("סורק 50 דפים, מאתר מאזן ומנתח נתונים..."):
+                with st.spinner("סורק את דפי המאזן..."):
                     full_text, pages = extract_deep_context(pdf_file_path)
                     
-                    with st.expander("צפה בדפים שנסרקו ויזואלית (דפי שער)"):
+                    # הצגת דפי שער כהוכחה שהקובץ נטען
+                    if pages:
                         cols = st.columns(len(pages))
                         for idx, p in enumerate(pages):
                             cols[idx].image(p, use_container_width=True)
                     
-                    # בניית הפרומפט המקצועי
                     prompt = f"""
-                    אתה אנליסט ביטוח מומחה. לפניך טקסט שחולץ מ-50 דפים של דוח כספי של חברת {sel_comp}.
-                    משימה: אתר בטקסט את הנתון של "הון עצמי המיוחס לבעלי המניות" (Equity attributable to owners).
-                    השווה את הנתון לתקופה מקבילה אם מופיע.
-                    ענה בעברית מקצועית ומדויקת על השאלה: {query}
+                    נתח את דוח חברת {sel_comp}. 
+                    מצא בטקסט את נתון 'ההון העצמי המיוחס לבעלי המניות'.
+                    ענה בעברית על השאלה: {query}
                     
                     טקסט מהדוח:
-                    {full_text[:15000]} # שליחת חלק משמעותי מהטקסט לניתוח
+                    {full_text[:15000]}
                     """
-                    
-                    try:
-                        response = ai_model.generate_content(prompt)
-                        st.markdown("### 📝 תשובת האנליסט:")
-                        st.success(response.text)
-                    except Exception as e:
-                        st.error(f"שגיאה בהפקת התשובה: {e}")
+                    response = ai_model.generate_content(prompt)
+                    st.success(response.text)
     else:
-        st.error("לא ניתן להריץ ניתוח AI ללא קובץ PDF תואם בתיקיית הנתונים.")
+        st.error("חסר קובץ PDF בתיקייה לביצוע ניתוח AI.")
