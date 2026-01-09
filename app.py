@@ -11,28 +11,28 @@ import urllib.error
 st.set_page_config(page_title="MY AI APP", layout="wide")
 
 # ==========================================
-# 2. מנוע AI משוריין (Multi-Model Try)
+# 2. מנוע AI חכם (מתאים גרסאות למודלים)
 # ==========================================
-def ask_ai_robust(prompt):
-    """מנסה רשימה של מודלים עד שאחד מצליח"""
+def ask_ai_universal(prompt):
+    """מנסה מודלים שונים עם כתובות API מותאמות אישית לכל אחד"""
     if "GEMINI_API_KEY" not in st.secrets:
         return "Error: חסר מפתח API ב-Secrets."
     
     api_key = st.secrets["GEMINI_API_KEY"].strip()
     
-    # רשימת מודלים לניסיון (מהחדש לישן)
-    models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.0-pro",
-        "gemini-pro"
+    # מיפוי מודלים לגרסאות ה-API המתאימות להם
+    # Flash חייב v1beta, Pro חייב v1
+    model_configs = [
+        ("gemini-1.5-flash", "v1beta"),
+        ("gemini-1.5-flash-latest", "v1beta"),
+        ("gemini-pro", "v1") 
     ]
     
-    last_err = ""
+    last_log = []
     
-    for model in models:
+    for model_name, version in model_configs:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            url = f"https://generativelanguage.googleapis.com/{version}/models/{model_name}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
             data = json.dumps({
                 "contents": [{"parts": [{"text": prompt}]}]
@@ -45,16 +45,13 @@ def ask_ai_robust(prompt):
                 return res_json['candidates'][0]['content']['parts'][0]['text']
                 
         except urllib.error.HTTPError as e:
-            if e.code == 403:
-                return "⛔ שגיאת הרשאה (403): המפתח חסום או לא הופעל. וודא שיצרת אותו ב-Google AI Studio."
-            # אם 404, פשוט נמשיך למודל הבא
-            last_err = f"Model {model} error: {e.code}"
+            last_log.append(f"{model_name} ({version}): {e.code}")
             continue
         except Exception as e:
-            last_err = str(e)
+            last_log.append(f"{model_name}: {str(e)}")
             continue
             
-    return f"כל המודלים נכשלו. פרטים: {last_err}"
+    return f"כל המודלים נכשלו. לוג שגיאות: {', '.join(last_log)}"
 
 # ==========================================
 # 3. איתור קבצים
@@ -75,13 +72,14 @@ with st.sidebar:
     year = st.selectbox("שנה:", [2024, 2025, 2026])
     q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # בדיקת חיבור מהירה
-    if st.button("בדיקת חיבור ל-Google"):
-        res = ask_ai_robust("בדיקה")
-        if "שגיאה" in res or "Error" in res:
-            st.error(res)
-        else:
-            st.success("✅ החיבור תקין!")
+    # כפתור דיאגנוסטיקה
+    if st.button("בדיקת חיבור למודלים"):
+        with st.spinner("בודק תקשורת..."):
+            res = ask_ai_universal("בדיקה")
+            if "נכשלו" in res or "Error" in res:
+                st.error(res)
+            else:
+                st.success("✅ החיבור תקין! המערכת מצאה מודל זמין.")
 
     st.divider()
     
@@ -120,6 +118,7 @@ with t2:
                 try:
                     doc = fitz.open(active_file)
                     text_content = ""
+                    # קריאת 40 עמודים ראשונים
                     for i in range(min(len(doc), 40)):
                         text_content += doc[i].get_text()
                     
@@ -130,10 +129,10 @@ with t2:
                     {text_content[:30000]}
                     """
                     
-                    answer = ask_ai_robust(final_prompt)
+                    answer = ask_ai_universal(final_prompt)
                     
                     st.markdown("---")
-                    if "שגיאה" in answer or "Error" in answer or "נכשלו" in answer:
+                    if "נכשלו" in answer or "Error" in answer:
                         st.error(answer)
                     else:
                         st.write(answer)
@@ -141,5 +140,4 @@ with t2:
                 except Exception as e:
                     st.error(f"תקלה בקובץ: {e}")
     else:
-        # הנה השורה שתוקנה (הוספנו סוגריים וגרשיים בסוף)
         st.warning("⚠️ לא נמצא קובץ מתאים בתיקייה שנבחרה. אנא בדוק ב-GitHub.")
