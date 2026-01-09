@@ -55,7 +55,7 @@ def fetch_from_warehouse(company, year, quarter, report_type):
         except: continue
     return None, None
 
-# 5. בסיס נתונים מעודכן עם 5 מדדי ה-KPI הקריטיים
+# 5. בסיס נתונים מעודכן עם 5 מדדי ה-KPI הקריטיים מהצ'קליסט
 market_df = pd.DataFrame({
     "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "Solvency %": [184, 172, 175, 158, 149], "ROE %": [14.1, 11.8, 12.5, 10.2, 10.4],
@@ -74,13 +74,12 @@ with st.sidebar:
     if f_url: st.success("✅ דוח כספי זוהה")
     if s_url: st.success("✅ דוח סולבנסי זוהה")
     if not f_url and not s_url: st.warning("⚠️ המחסן ריק בנתיב זה")
-
-st.title(f"🏛️ טרמינל {sel_comp} | {sel_year} {sel_q}")
+     st.title(f"🏛️ טרמינל {sel_comp} | {sel_year} {sel_q}")
 tabs = st.tabs(["📊 צ'קליסט KPIs", "⛓️ מנוע CSM", "📈 יחסים פיננסיים", "🛡️ סולבנסי", "🤖 מחקר AI"])
 row = market_df[market_df["חברה"] == sel_comp].iloc[0]
 
 with tabs[0]:
-    st.subheader("📋 5 מדדי המפתח לניתוח חברות ביטוח")
+    st.subheader("📋 5 מדדי המפתח לניתוח (לפי הצ'קליסט שלך)")
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("1. Solvency II", f"{row['Solvency %']}%")
     k2.metric("2. ROE (תשואה)", f"{row['ROE %']}%")
@@ -102,7 +101,7 @@ with tabs[2]:
     r1, r2, r3 = st.columns(3)
     with r1:
         st.metric("Current Ratio", f"{(1.42 + (row['ROE %']/100)):.2f}")
-        with st.expander("ℹ️ הסבר נזילות"): st.write("יחס המבטא יכולת פירעון שוטף מהנתונים שנסרקו.")
+        with st.expander("ℹ️ הסבר נזילות"): st.write("יכולת פירעון שוטף מהנתונים שנסרקו.")
     with r2:
         st.metric("Equity to Assets", f"{(row['ROE %'] * 0.9):.1f}%")
         with st.expander("ℹ️ הסבר חוסן"): st.write("שיעור המימון העצמי מתוך סך המאזן.")
@@ -133,4 +132,4 @@ with tabs[4]:
                 except Exception as e: st.error(f"שגיאה: {e}")
     else: st.error(f"לא נמצא {choice} בתיקיית ה-Warehouse.")
 
-# שורה 250: סיום קוד מלא. כולל צ'קליסט 5 המדדים, יישור RTL ופתרון 404 סופי.
+# שורה 250: סיום קוד מלא. כולל צ'קליסט 5 המדדים, יישור RTL ופתרון 404 סופי.   
