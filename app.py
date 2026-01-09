@@ -14,6 +14,7 @@ import io
 st.set_page_config(page_title="Apex Pro Enterprise | Strategic AI Terminal", layout="wide")
 
 def initialize_ai():
+    """בדיקת חיבור למפתח ה-API מתוך ה-Secrets של Streamlit"""
     try:
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
@@ -28,8 +29,10 @@ ai_ready = initialize_ai()
 
 @st.cache_resource
 def get_stable_model():
+    """טעינת מודל ה-AI באופן יציב למניעת שגיאות 404"""
     if not ai_ready:
         return None, "Missing API Key"
+    # שם מודל תקני ל-Streamlit Cloud
     model_name = 'gemini-1.5-flash'
     try:
         model = genai.GenerativeModel(model_name)
@@ -43,6 +46,7 @@ ai_model, active_model_name = get_stable_model()
 # 2. PDF DEEP SCAN ENGINE
 # ==========================================
 def extract_deep_context(pdf_path):
+    """חילוץ טקסט מ-50 דפים לאיתור נתונים עמוקים (מאזן)"""
     full_text = ""
     preview_images = []
     try:
@@ -57,8 +61,9 @@ def extract_deep_context(pdf_path):
         return f"Error: {e}", []
 
 # ==========================================
-# 3. DATA WAREHOUSE - נקי מתווי שקל בקוד
+# 3. DATA WAREHOUSE (נתונים השוואתיים)
 # ==========================================
+# שמות העמודות באנגלית למניעת שגיאות Syntax עם תווים מיוחדים
 market_df = pd.DataFrame({
     "company": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "solvency": [184, 172, 175, 158, 149],
@@ -67,7 +72,7 @@ market_df = pd.DataFrame({
 })
 
 # ==========================================
-# 4. SIDEBAR
+# 4. SIDEBAR - CONTROL PANEL
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -75,14 +80,21 @@ with st.sidebar:
     sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
     sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # הגדרת נתיב הקובץ
-    pdf_file_path = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}/Financial_Reports/{sel_comp}_{sel_q}_{sel_year}.pdf"
-    file_ready = os.path.exists(pdf_file_path)
+    st.divider()
+    # נתיב חיפוש קבצים - מוגדר לחפש בתיקייה הראשית או תחת data
+    pdf_filename = f"{sel_comp}_{sel_q}_{sel_year}.pdf"
+    alt_path = f"data/Insurance_Warehouse/{sel_comp}/{sel_year}/{sel_q}/Financial_Reports/{pdf_filename}"
     
-    if file_ready:
-        st.success("✅ דוח זוהה")
+    if os.path.exists(pdf_filename):
+        pdf_path = pdf_filename
+        st.success(f"✅ זוהה קובץ: {pdf_filename}")
+    elif os.path.exists(alt_path):
+        pdf_path = alt_path
+        st.success("✅ דוח זוהה בתיקייה")
     else:
-        st.warning("⚠️ דוח לא נמצא")
+        pdf_path = None
+        st.warning(f"⚠️ חסר קובץ: {pdf_filename}")
+        st.info("העלה את הקובץ ל-GitHub עם השם המדויק.")
 
 # ==========================================
 # 5. MAIN INTERFACE
@@ -91,45 +103,51 @@ st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
 
 tabs = st.tabs(["📊 KPI Dashboard", "🤖 AI Deep Research"])
 
+# --- TAB 1: KPI Dashboard ---
 with tabs[0]:
     row = market_df[market_df["company"] == sel_comp].iloc[0]
-    st.subheader("מדדי ליבה")
+    st.subheader("מדדי ליבה (IFRS 17)")
     k1, k2, k3 = st.columns(3)
     k1.metric("Solvency Ratio", f"{row['solvency']}%")
-    k2.metric("ROE", f"{row['roe']}%")
-    # החלפת סימן השקל במילה "NIS" למניעת שגיאת Syntax
+    k2.metric("ROE (תשואה להון)", f"{row['roe']}%")
     k3.metric("CSM Balance", f"NIS {row['csm']}B")
     
-    st.plotly_chart(px.bar(market_df, x="company", y="solvency", color="company"), use_container_width=True)
+    st.plotly_chart(px.bar(market_df, x="company", y="solvency", color="company", title="השוואת חוסן הון בענף"), use_container_width=True)
 
+# --- TAB 2: AI DEEP RESEARCH ---
 with tabs[1]:
-    st.subheader("🤖 אנליסט AI - סריקה עמוקה")
-    if file_ready:
-        query = st.text_input("שאל שאלה על ההון העצמי או ה-CSM:")
+    st.subheader("🤖 אנליסט AI היברידי (טקסט + ויז'ן)")
+    if pdf_path:
+        query = st.text_input("שאל על הנתונים (למשל: מהו ההון העצמי המיוחס לבעלי המניות?)")
         analyze_btn = st.button("🚀 הרץ ניתוח עמוק")
         
         if analyze_btn and query:
             if ai_model is None:
-                st.error("בדוק את ה-API Key ב-Secrets")
+                st.error("ה-AI לא מחובר. וודא שהמפתח ב-Secrets תקין.")
             else:
-                with st.spinner("סורק את דפי המאזן..."):
-                    full_text, pages = extract_deep_context(pdf_file_path)
+                with st.spinner("סורק את דפי המאזן ומנתח נתונים..."):
+                    full_text, pages = extract_deep_context(pdf_path)
                     
-                    # הצגת דפי שער כהוכחה שהקובץ נטען
                     if pages:
+                        st.caption("דפים שנסרקו לאנליזה:")
                         cols = st.columns(len(pages))
                         for idx, p in enumerate(pages):
                             cols[idx].image(p, use_container_width=True)
                     
                     prompt = f"""
-                    נתח את דוח חברת {sel_comp}. 
-                    מצא בטקסט את נתון 'ההון העצמי המיוחס לבעלי המניות'.
-                    ענה בעברית על השאלה: {query}
+                    אתה אנליסט ביטוח בכיר. נתח את הטקסט שחולץ מהדוח של {sel_comp}.
+                    אתר את הנתון של "הון עצמי המיוחס לבעלי המניות" במאזן.
+                    ענה בעברית מקצועית על השאלה: {query}
                     
-                    טקסט מהדוח:
+                    טקסט מהדוח (50 דפים):
                     {full_text[:15000]}
                     """
-                    response = ai_model.generate_content(prompt)
-                    st.success(response.text)
+                    try:
+                        response = ai_model.generate_content(prompt)
+                        st.markdown("---")
+                        st.markdown("### 📝 תשובת האנליסט:")
+                        st.success(response.text)
+                    except Exception as e:
+                        st.error(f"שגיאה בהפעלת ה-AI: {e}")
     else:
-        st.error("חסר קובץ PDF בתיקייה לביצוע ניתוח AI.")
+        st.info("כדי להפעיל את האנליסט, העלה את קובץ ה-PDF ל-GitHub.")
