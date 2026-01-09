@@ -113,7 +113,7 @@ if uploaded_file:
             with st.chat_message("assistant"):
                 with st.spinner('מנתח...'):
                     try:
-                        # כאן הייתה הבעיה קודם - וודא שהכל מועתק
+                        # כאן תוקנה השגיאה - נוסף סוגר סוגר בסוף הפקודה
                         response = model.generate_content(
                             [gemini_file, prompt],
                             request_options={"timeout": 600}
