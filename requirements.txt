@@ -1,5 +1,2 @@
 streamlit
-pandas
-plotly
-google-generativeai
-PyMuPDF
+google-generativeai>=0.7.0
