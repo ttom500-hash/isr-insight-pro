@@ -14,6 +14,7 @@ import io
 st.set_page_config(page_title="Apex Pro Enterprise | Strategic AI Terminal", layout="wide")
 
 def initialize_ai():
+    """חיבור למנוע ה-AI באמצעות המפתח ב-Secrets"""
     try:
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
@@ -28,6 +29,7 @@ ai_ready = initialize_ai()
 
 @st.cache_resource
 def get_stable_model():
+    """טעינת מודל ה-AI באופן יציב"""
     if not ai_ready: return None, "Missing API Key"
     model_name = 'gemini-1.5-flash'
     try:
@@ -38,16 +40,17 @@ def get_stable_model():
 ai_model, active_model_name = get_stable_model()
 
 # ==========================================
-# 2. PDF ENGINE
+# 2. PDF DEEP SCAN ENGINE
 # ==========================================
 def extract_deep_context(pdf_path):
+    """חילוץ טקסט מ-50 דפים לאיתור נתוני מאזן עמוקים"""
     full_text = ""
     preview_images = []
     try:
         doc = fitz.open(pdf_path)
         for i in range(min(len(doc), 50)):
             full_text += f"\n--- Page {i+1} ---\n" + doc[i].get_text()
-            if i < 5:
+            if i < 5: # שמירת 5 דפים ראשונים לתצוגה ויזואלית
                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
                 preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
         return full_text, preview_images
@@ -55,7 +58,7 @@ def extract_deep_context(pdf_path):
         return f"Error: {e}", []
 
 # ==========================================
-# 3. DATA WAREHOUSE
+# 3. DATA WAREHOUSE (נתונים השוואתיים)
 # ==========================================
 market_df = pd.DataFrame({
     "company": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
@@ -73,7 +76,7 @@ with st.sidebar:
     sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
     sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # חיפוש הקובץ בתיקייה הראשית
+    # השם שהמערכת מחפשת ב-GitHub
     expected_filename = f"{sel_comp}_{sel_q}_{sel_year}.pdf"
     
     if os.path.exists(expected_filename):
@@ -94,28 +97,29 @@ tabs = st.tabs(["📊 KPI Dashboard", "🤖 AI Deep Research"])
 
 with tabs[0]:
     row = market_df[market_df["company"] == sel_comp].iloc[0]
-    st.subheader("מדדי ליבה (IFRS 17)")
+    st.subheader("מדדי ליבה")
     k1, k2, k3 = st.columns(3)
     k1.metric("Solvency Ratio", f"{row['solvency']}%")
     k2.metric("ROE (תשואה להון)", f"{row['roe']}%")
     k3.metric("CSM Balance", f"NIS {row['csm']}B")
-    st.plotly_chart(px.bar(market_df, x="company", y="solvency", color="company"), use_container_width=True)
+    st.plotly_chart(px.bar(market_df, x="company", y="solvency", color="company", title="השוואת חוסן הון"), use_container_width=True)
 
 with tabs[1]:
     st.subheader("🤖 אנליסט AI - סריקה עמוקה")
     if file_ready:
-        query = st.text_input("שאל שאלה (למשל: מהו ההון העצמי המיוחס לבעלי המניות?)")
+        query = st.text_input("שאל שאלה מקצועית (למשל: מהו ההון העצמי המיוחס לבעלי המניות?)")
         if st.button("🚀 הרץ ניתוח עמוק") and query:
             if ai_model:
-                with st.spinner("סורק דפי מאזן..."):
+                with st.spinner("סורק את דפי המאזן..."):
                     full_text, pages = extract_deep_context(pdf_path)
                     if pages:
                         cols = st.columns(len(pages))
                         for idx, p in enumerate(pages): cols[idx].image(p, use_container_width=True)
                     
-                    prompt = f"נתח את דוח {sel_comp}. מצא את 'ההון העצמי המיוחס לבעלי המניות'. שאלה: {query}\n\nטקסט: {full_text[:15000]}"
+                    prompt = f"נתח את דוח {sel_comp}. אתר את הנתון 'הון עצמי המיוחס לבעלי המניות'. שאלה: {query}\n\nטקסט מהדוח: {full_text[:15000]}"
                     response = ai_model.generate_content(prompt)
                     st.success(response.text)
-            else: st.error("AI Not Ready")
+            else:
+                st.error("AI לא מחובר - בדוק Secrets")
     else:
-        st.info(f"העלה ל-GitHub קובץ בשם: {expected_filename}")
+        st.info(f"העלה ל-GitHub את הדוח בשם המדויק: {expected_filename}")
