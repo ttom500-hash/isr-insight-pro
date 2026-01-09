@@ -9,53 +9,53 @@ st.set_page_config(page_title="Apex Pro", layout="wide")
 st.markdown("""<style>.stApp {direction: rtl;} h1, h2, h3, p, div {text-align: right;} 
 .stTextInput>div>div>input {text-align: right;} .stChatMessage {direction: rtl; text-align: right;}</style>""", unsafe_allow_html=True)
 
-st.title("🏢 Apex Pro - אנליסט אוטומטי")
+st.title("🏢 Apex Pro - אנליסט חכם")
 
-# --- 2. חיבור למפתח (מהכספת בלבד) ---
-api_key = st.secrets.get("GOOGLE_API_KEY")
+# --- 2. איתור מפתח חכם (בודק את כל האפשרויות) ---
+api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+
 if not api_key:
-    st.error("❌ חסר מפתח ב-Secrets. נא להוסיף GOOGLE_API_KEY")
+    st.error("❌ לא נמצא מפתח ב-Secrets.")
+    st.info("הקוד מחפש: GOOGLE_API_KEY או GEMINI_API_KEY")
+    # הצגת מה שכן יש (לצורך דיבוג בלבד)
+    if st.secrets:
+        st.warning(f"המפתחות הקיימים כרגע הם: {list(st.secrets.keys())}")
     st.stop()
 
 genai.configure(api_key=api_key)
 
-# --- 3. המוח: איתור אוטומטי של המודל הנכון ---
+# --- 3. איתור מודל אוטומטי (למניעת שגיאת 404) ---
 @st.cache_resource
 def get_best_model():
     try:
-        # מבקש מגוגל את רשימת כל המודלים הזמינים למפתח הזה
         available_models = list(genai.list_models())
-        
-        # סינון: רק מודלים שיודעים לייצר טקסט
         text_models = [m for m in available_models if 'generateContent' in m.supported_generation_methods]
         
         if not text_models:
-            return None, "לא נמצאו מודלים זמינים."
+            return None, "לא נמצאו מודלים."
             
-        # חיפוש המודל המהיר ביותר (Flash)
+        # עדיפות ל-Flash
         for m in text_models:
             if "flash" in m.name.lower():
-                return m.name, "Flash (הכי מהיר)"
+                return m.name, "Flash ⚡"
         
-        # אם אין Flash, חפש Pro
+        # עדיפות ל-Pro
         for m in text_models:
             if "pro" in m.name.lower():
-                return m.name, "Pro (חזק ומדויק)"
+                return m.name, "Pro 🧠"
                 
-        # ברירת מחדל: הראשון שברשימה
         return text_models[0].name, "Standard"
         
     except Exception as e:
         return None, str(e)
 
-# ביצוע הבדיקה
 model_name, model_desc = get_best_model()
 
 if model_name:
-    st.success(f"✅ מחובר בהצלחה! משתמש במודל: **{model_name}**")
+    st.caption(f"מחובר למודל: {model_name} ({model_desc})")
     model = genai.GenerativeModel(model_name)
 else:
-    st.error(f"תקלה במציאת מודל: {model_desc}")
+    st.error(f"תקלה באיתור מודל: {model_desc}")
     st.stop()
 
 # --- 4. פונקציית העלאה ---
