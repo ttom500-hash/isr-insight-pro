@@ -19,7 +19,6 @@ st.markdown("""
     h1, h2, h3, p, div { text-align: right; }
     .stTextInput > div > div > input { text-align: right; }
     .stSelectbox > div > div > div { text-align: right; }
-    /* תיקון ליישור הודעות צ'אט */
     .stChatMessage { direction: rtl; text-align: right; }
 </style>
 """, unsafe_allow_html=True)
@@ -29,7 +28,6 @@ st.title("📊 Apex Pro - ניתוח דוחות ביטוח מתקדם")
 st.caption("מופעל על ידי Gemini 1.5 Pro - המודל החזק ביותר לניתוח פיננסי")
 
 # --- 4. הגדרת API ---
-# בדיקה האם המפתח קיים ב-Secrets לפני השימוש
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
@@ -40,7 +38,7 @@ else:
 
 # --- 5. הגדרת המודל (PRO) ---
 generation_config = {
-    "temperature": 0.2,       # דיוק גבוה
+    "temperature": 0.2,
     "top_p": 0.95,
     "top_k": 64,
     "max_output_tokens": 8192,
@@ -64,12 +62,10 @@ model = genai.GenerativeModel(
 
 # --- 6. פונקציות עזר ---
 def upload_to_gemini(path, mime_type="application/pdf"):
-    """מעלה קובץ לגוגל"""
     file = genai.upload_file(path, mime_type=mime_type)
     return file
 
 def wait_for_files_active(files):
-    """ממתין שהקובץ יהיה מוכן"""
     st.spinner('מעבד את הקובץ בשרתי Google AI...')
     for name in (file.name for file in files):
         file = genai.get_file(name)
@@ -83,7 +79,6 @@ def wait_for_files_active(files):
 with st.sidebar:
     st.header("הגדרות וקבצים")
     uploaded_file = st.file_uploader("העלה דוח כספי (PDF)", type=['pdf'])
-    
     st.markdown("---")
     st.info("💡 טיפ: לתוצאות מדויקות, העלה את קובץ 'הדוחות הכספיים' המלא.")
 
@@ -118,6 +113,22 @@ if uploaded_file:
             with st.chat_message("assistant"):
                 with st.spinner('מנתח...'):
                     try:
+                        # כאן הייתה הבעיה קודם - וודא שהכל מועתק
                         response = model.generate_content(
                             [gemini_file, prompt],
                             request_options={"timeout": 600}
+                        )
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    except Exception as e:
+                        st.error(f"שגיאה בקבלת תשובה: {e}")
+
+    except Exception as e:
+        st.error(f"שגיאה בעיבוד הקובץ: {e}")
+        
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+else:
+    st.info("👈 נא להעלות קובץ PDF כדי להתחיל.")
