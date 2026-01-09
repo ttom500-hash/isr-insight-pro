@@ -6,69 +6,76 @@ import urllib.request
 import urllib.error
 
 # ==========================================
-# 1. הגדרות האפליקציה: MY AI APP
+# 1. הגדרות האפליקציה
 # ==========================================
 st.set_page_config(page_title="MY AI APP", layout="wide")
 
 # ==========================================
-# 2. מנוע AI (חיבור ישיר - עוקף תקלות)
+# 2. מנוע AI משוריין (עם מנגנון גיבוי אוטומטי)
 # ==========================================
 def ask_ai(prompt):
-    """שולח שאלה למודל Gemini 1.5 Flash באמצעות חיבור ישיר"""
+    """מנסה את המודל המהיר, ואם נכשל - עובר למודל היציב"""
     if "GEMINI_API_KEY" not in st.secrets:
         return "Error: חסר מפתח API ב-Secrets."
     
-    # ניקוי רווחים קריטי
     api_key = st.secrets["GEMINI_API_KEY"].strip()
     
-    # כתובת המודל היציב
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # רשימת מודלים לניסיון: קודם החדש, אחר כך הישן והטוב
+    models_to_try = ["gemini-1.5-flash", "gemini-pro"]
     
-    headers = {'Content-Type': 'application/json'}
-    data = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}]
-    }).encode('utf-8')
+    last_error = ""
     
-    try:
-        # שליחת בקשת רשת רגילה
-        req = urllib.request.Request(url, data=data, headers=headers, method='POST')
-        with urllib.request.urlopen(req) as response:
-            res_json = json.loads(response.read().decode())
-            return res_json['candidates'][0]['content']['parts'][0]['text']
+    for model in models_to_try:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}]
+            }).encode('utf-8')
             
-    except urllib.error.HTTPError as e:
-        if e.code == 403:
-            return "⛔ שגיאת הרשאה (403): המפתח החדש עדיין לא נקלט. בצע Reboot לאפליקציה."
-        return f"שגיאת תקשורת ({e.code}): {e.reason}"
-    except Exception as e:
-        return f"תקלה כללית: {str(e)}"
+            # שליחת הבקשה
+            req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+            with urllib.request.urlopen(req) as response:
+                res_json = json.loads(response.read().decode())
+                return res_json['candidates'][0]['content']['parts'][0]['text']
+                
+        except urllib.error.HTTPError as e:
+            # אם קיבלנו 404 או 503, ננסה את המודל הבא
+            if e.code in [404, 503]:
+                last_error = f"Model {model} failed ({e.code}), switching..."
+                continue
+            elif e.code == 403:
+                return "⛔ שגיאת הרשאה (403): המפתח חסום. וודא שהשתמשת במפתח מ-Google AI Studio."
+            else:
+                return f"שגיאת תקשורת ({e.code}): {e.reason}"
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    return f"כל המודלים נכשלו. שגיאה אחרונה: {last_error}"
 
 # ==========================================
-# 3. מנוע איתור קבצים חכם
+# 3. מנוע איתור קבצים
 # ==========================================
 def find_pdf_file(base_dir, file_start_name):
-    """מוצא קובץ PDF גם אם הסיומת כפולה"""
     if not os.path.exists(base_dir):
-        return None
-        
+        return None 
     for f in os.listdir(base_dir):
         if f.lower().startswith(file_start_name.lower()) and ".pdf" in f.lower():
             return os.path.join(base_dir, f)
     return None
 
 # ==========================================
-# 4. תפריט צד (Sidebar)
+# 4. תפריט צד
 # ==========================================
 with st.sidebar:
     st.header("🗄️ Database")
-    
     comp = st.selectbox("חברה:", ["Phoenix", "Harel", "Menora", "Clal", "Migdal"])
     year = st.selectbox("שנה:", [2024, 2025, 2026])
     q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
     st.divider()
     
-    # איתור נתיבים
     root_path = f"data/Insurance_Warehouse/{comp}/{year}/{q}"
     if not os.path.exists(root_path):
         root_path = f"Data/Insurance_Warehouse/{comp}/{year}/{q}"
@@ -80,35 +87,36 @@ with st.sidebar:
     st.write(f"🛡️ דוח סולבנסי: {'✅' if sol_path else '❌'}")
 
 # ==========================================
-# 5. מסך ראשי: MY AI APP
+# 5. מסך ראשי
 # ==========================================
 st.title("MY AI APP 🤖")
-st.caption(f"מערכת אנליזה מתקדמת: {comp} | {year} {q}")
+st.caption(f"אנליזה חכמה: {comp} | {year} {q}")
 
 t1, t2 = st.tabs(["📊 מדדים", "💬 צ'אט עם הדוחות"])
 
 with t1:
-    st.info("כאן יוצגו המדדים הגרפיים (Solvency, ROE, CSM).")
+    st.info("כאן יוצגו המדדים הגרפיים (Solvency, ROE).")
 
 with t2:
-    mode = st.radio("בחר קובץ לניתוח:", ["דוח כספי", "דוח סולבנסי"], horizontal=True)
+    mode = st.radio("בחר קובץ:", ["דוח כספי", "דוח סולבנסי"], horizontal=True)
     active_file = fin_path if mode == "דוח כספי" else sol_path
     
     if active_file:
         st.success(f"מחובר לקובץ: {os.path.basename(active_file)}")
         
-        query = st.text_input("מה תרצה לדעת? (למשל: מהו ההון העצמי?)")
+        query = st.text_input("שאל שאלה על הדוח:")
         
         if st.button("🚀 שאל את ה-AI") and query:
-            with st.spinner("ה-AI סורק את הדוח..."):
+            with st.spinner("מנתח נתונים (עשוי לקחת כמה שניות)..."):
                 try:
                     doc = fitz.open(active_file)
                     text_content = ""
-                    for i in range(min(len(doc), 50)):
+                    # קריאת 40 עמודים ראשונים לביצועים מהירים
+                    for i in range(min(len(doc), 40)):
                         text_content += doc[i].get_text()
                     
                     final_prompt = f"""
-                    אתה אנליסט מומחה. ענה על השאלה לפי הטקסט המצורף.
+                    אתה אנליסט מומחה. ענה בעברית על השאלה לפי הטקסט.
                     שאלה: {query}
                     טקסט מהדוח:
                     {text_content[:30000]}
@@ -117,12 +125,13 @@ with t2:
                     answer = ask_ai(final_prompt)
                     
                     st.markdown("---")
-                    if "שגיאה" in answer:
+                    if "שגיאה" in answer or "Error" in answer:
                         st.error(answer)
                     else:
                         st.write(answer)
                         
                 except Exception as e:
-                    st.error(f"תקלה בקובץ: {e}")
+                    st.error(f"תקלה בקריאת הקובץ: {e}")
     else:
+        # התיקון לשגיאת הסינטקס שעשית קודם נמצא כאן:
         st.warning("⚠️ לא נמצא קובץ מתאים בתיקייה שנבחרה. אנא בדוק ב-GitHub.")
