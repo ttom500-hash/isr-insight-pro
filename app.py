@@ -4,7 +4,7 @@ import tempfile
 import os
 import time
 
-# --- 1. הגדרת דף (חייבת להיות ראשונה) ---
+# --- 1. הגדרת דף ---
 st.set_page_config(
     page_title="Apex Pro - ניתוח דוחות ביטוח",
     page_icon="📊",
@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. עיצוב RTL (מימין לשמאל) ---
+# --- 2. עיצוב RTL ---
 st.markdown("""
 <style>
     .stApp { direction: rtl; }
@@ -84,20 +84,17 @@ with st.sidebar:
 
 # --- 8. לוגיקה ראשית ---
 if uploaded_file:
-    # שמירת קובץ זמני
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         tmp_path = tmp_file.name
 
     try:
-        # שליחה לגוגל
         with st.spinner('מפענח את הדוח באמצעות Gemini Pro...'):
             gemini_file = upload_to_gemini(tmp_path)
             wait_for_files_active([gemini_file])
             
         st.success("✅ הקובץ נקלט בהצלחה! המערכת מוכנה.")
 
-        # ניהול היסטוריית צ'אט
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
@@ -105,7 +102,6 @@ if uploaded_file:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # קלט משתמש
         if prompt := st.chat_input("שאל שאלה על הדוח..."):
             st.chat_message("user").markdown(prompt)
             st.session_state.messages.append({"role": "user", "content": prompt})
@@ -113,7 +109,7 @@ if uploaded_file:
             with st.chat_message("assistant"):
                 with st.spinner('מנתח...'):
                     try:
-                        # כאן תוקנה השגיאה - נוסף סוגר סוגר בסוף הפקודה
+                        # התיקון נמצא כאן למטה: הוספתי את הסוגר )
                         response = model.generate_content(
                             [gemini_file, prompt],
                             request_options={"timeout": 600}
