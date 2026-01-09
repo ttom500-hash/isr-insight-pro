@@ -3,50 +3,30 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import fitz  # PyMuPDF
-from PIL import Image
-import io
 
 # ==========================================
 # 1. SETUP & AI CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-def initialize_ai():
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            return genai.GenerativeModel('gemini-1.5-flash')
-        return None
-    except Exception:
-        return None
-
-model = initialize_ai()
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    st.error("Missing API Key in Secrets")
 
 # ==========================================
-# 2. פונקציית חיפוש קבצים גמישה
+# 2. פונקציית איתור קבצים עם הגנה מכפילויות
 # ==========================================
-def find_pdf_path(company, year, quarter, report_type):
-    """מחפש את הקובץ בכמה וריאציות של נתיבים"""
+def find_pdf_smart(base_folder, target_name):
+    """מחפש קובץ שמתחיל בשם המבוקש ומתעלם מכפילויות סיומת"""
+    if not os.path.exists(base_folder):
+        return None
     
-    # הגדרת שמות הקבצים המצופים
-    if report_type == "כספי":
-        filename = f"{company}_{quarter}_{year}.pdf"
-        sub_folder = "Financial_Reports"
-    else:
-        filename = f"Solvency_{company}_{quarter}_{year}.pdf"
-        sub_folder = "Solvency_Reports"
-
-    # רשימת נתיבים אפשריים לבדיקה (כולל Data באות גדולה)
-    possible_paths = [
-        f"data/Insurance_Warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
-        f"Data/Insurance_Warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
-        f"data/insurance_warehouse/{company}/{year}/{quarter}/{sub_folder}/{filename}",
-        filename # בדיקה גם בתיקייה הראשית
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
+    for f in os.listdir(base_folder):
+        # בודק אם השם מתחיל נכון (למשל Clal_Q1_2025) ומסתיים ב-pdf
+        if f.lower().startswith(target_name.lower()) and f.lower().endswith('.pdf'):
+            return os.path.join(base_folder, f)
     return None
 
 # ==========================================
@@ -54,63 +34,57 @@ def find_pdf_path(company, year, quarter, report_type):
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
-    sel_comp = st.selectbox("בחר חברה:", ["Phoenix", "Harel", "Menora", "Clal", "Migdal"])
-    sel_year = st.selectbox("שנה:", [2024, 2025, 2026])
-    sel_q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
+    comp = st.selectbox("בחר חברה:", ["Phoenix", "Harel", "Menora", "Clal", "Migdal"])
+    year = st.selectbox("שנה:", [2024, 2025, 2026])
+    q = st.select_slider("רבעון:", options=["Q1", "Q2", "Q3", "Q4"])
     
     st.divider()
     
-    # חיפוש שני סוגי הדוחות
-    path_fin = find_pdf_path(sel_comp, sel_year, sel_q, "כספי")
-    path_sol = find_pdf_path(sel_comp, sel_year, sel_q, "סולבנסי")
+    # הגדרת בסיס החיפוש
+    base_dir = f"data/Insurance_Warehouse/{comp}/{year}/{q}"
+    if not os.path.exists(base_dir): # בדיקה גם עם Data גדולה
+        base_dir = f"Data/Insurance_Warehouse/{comp}/{year}/{q}"
+
+    # חיפוש חכם שמתעלם מ-.pdf.pdf
+    fin_target = f"{comp}_{q}_{year}"
+    sol_target = f"Solvency_{comp}_{q}_{year}"
+    
+    path_fin = find_pdf_smart(f"{base_dir}/Financial_Reports", fin_target)
+    path_sol = find_pdf_smart(f"{base_dir}/Solvency_Reports", sol_target)
     
     st.write(f"📄 דוח כספי: {'✅' if path_fin else '❌'}")
-    st.write(f"🛡️ דוח סולבנסי: {'✅' if path_sol else '❌'}")
+    if path_fin and ".pdf.pdf" in path_fin:
+        st.caption("⚠️ זוהתה סיומת כפולה בקובץ, המערכת תתקן זאת אוטומטית.")
     
-    if not path_fin and not path_sol:
-        st.info("💡 טיפ: וודא שהנתיב ב-GitHub תואם בדיוק למבנה התיקיות.")
+    st.write(f"🛡️ דוח סולבנסי: {'✅' if path_sol else '❌'}")
 
 # ==========================================
 # 4. MAIN INTERFACE
 # ==========================================
-st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
-
+st.title(f"🏛️ {comp} | Strategic AI Terminal")
 t1, t2 = st.tabs(["📊 KPI Dashboard", "🤖 AI Analyst"])
 
 with t2:
-    st.subheader("ניתוח דוחות עמוק")
-    
-    report_mode = st.radio("סוג דוח לניתוח:", ["כספי", "סולבנסי"])
-    active_path = path_fin if report_mode == "כספי" else path_sol
+    st.subheader("ניתוח AI עמוק")
+    mode = st.radio("בחר דוח:", ["כספי", "סולבנסי"])
+    active_path = path_fin if mode == "כספי" else path_sol
     
     if active_path:
-        query = st.text_input(f"שאל על דוח ה{report_mode} (למשל: מהו ההון העצמי?):")
+        st.success(f"מנתח את: {os.path.basename(active_path)}")
+        query = st.text_input(f"שאל על ה{mode} (למשל: מהו ההון העצמי?):")
         
-        if st.button("🚀 הרץ ניתוח עמוק") and query:
-            if model:
-                with st.spinner("סורק דפים ומחלץ נתונים..."):
-                    try:
-                        doc = fitz.open(active_path)
-                        # סריקת 40 עמודים ראשונים לטקסט
-                        text_content = ""
-                        for i in range(min(len(doc), 40)):
-                            text_content += doc[i].get_text()
-                        
-                        prompt = f"""
-                        אתה אנליסט בכיר. נתח את דוח ה{report_mode} של חברת {sel_comp}.
-                        התמקד ב-5 ה-KPIs הקריטיים (הון עצמי, סולבנסי, רווח כולל).
-                        שאלה: {query}
-                        
-                        טקסט מהדוח:
-                        {text_content[:15000]}
-                        """
-                        
-                        response = model.generate_content(prompt)
-                        st.markdown("---")
-                        st.success(response.text)
-                    except Exception as e:
-                        st.error(f"שגיאה בקריאת הקובץ: {e}")
-            else:
-                st.error("ה-AI לא מוגדר. בדוק את ה-API Key ב-Secrets.")
+        if st.button("🚀 הרץ ניתוח") and query:
+            with st.spinner("סורק נתונים..."):
+                try:
+                    doc = fitz.open(active_path)
+                    text = "".join([page.get_text() for page in doc[:40]])
+                    
+                    # שימוש ב-KPI הקריטי שביקשת לשמור
+                    prompt = f"נתח דוח {mode} של {comp}. מצא 'הון עצמי מיוחס לבעלי המניות'. שאלה: {query}\n\nטקסט: {text[:15000]}"
+                    response = model.generate_content(prompt)
+                    st.markdown("---")
+                    st.write(response.text)
+                except Exception as e:
+                    st.error(f"שגיאה: {e}")
     else:
-        st.warning(f"לא נמצא קובץ {report_mode} עבור {sel_comp} לנתוני {sel_q} {sel_year}.")
+        st.warning("הקובץ לא נמצא בנתיב המבוקש ב-GitHub.")
