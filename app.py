@@ -4,7 +4,7 @@ import tempfile
 import os
 import time
 
-# --- הגדרת דף (חייבת להיות ראשונה) ---
+# --- 1. הגדרת דף (חייבת להיות ראשונה) ---
 st.set_page_config(
     page_title="Apex Pro - ניתוח דוחות ביטוח",
     page_icon="📊",
@@ -12,38 +12,41 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- עיצוב RTL (מימין לשמאל) ---
+# --- 2. עיצוב RTL (מימין לשמאל) ---
 st.markdown("""
 <style>
     .stApp { direction: rtl; }
     h1, h2, h3, p, div { text-align: right; }
     .stTextInput > div > div > input { text-align: right; }
     .stSelectbox > div > div > div { text-align: right; }
+    /* תיקון ליישור הודעות צ'אט */
+    .stChatMessage { direction: rtl; text-align: right; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- כותרת ראשית ---
+# --- 3. כותרת ---
 st.title("📊 Apex Pro - ניתוח דוחות ביטוח מתקדם")
 st.caption("מופעל על ידי Gemini 1.5 Pro - המודל החזק ביותר לניתוח פיננסי")
 
-# --- הגדרת API ---
-try:
+# --- 4. הגדרת API (החלק המתוקן) ---
+# בדיקה האם המפתח קיים ב-Secrets לפני השימוש
+if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-except Exception as e:
-    st.error("⚠️ מפתח API חסר. נא להגדיר אותו ב-Streamlit Secrets.")
-    st.stop()
+else:
+    st.error("⚠️ שגיאה: המפתח GOOGLE_API_KEY לא נמצא בקובץ ה-Secrets.")
+    st.info("אנא גש להגדרות האפליקציה -> Secrets וודא שהמפתח מוגדר כך: GOOGLE_API_KEY = \"המפתח שלך\"")
+    st.stop() # עוצר את הריצה כדי לא לקרוס
 
-# --- הגדרת המודל (החלק החשוב ביותר!) ---
+# --- 5. הגדרת המודל (PRO) ---
 generation_config = {
-    "temperature": 0.2,       # דיוק מקסימלי, פחות יצירתיות
+    "temperature": 0.2,       # דיוק גבוה
     "top_p": 0.95,
     "top_k": 64,
-    "max_output_tokens": 8192, # תשובות ארוכות ומפורטות
+    "max_output_tokens": 8192,
     "response_mime_type": "text/plain",
 }
 
-# שימוש במודל PRO לקריאת מסמכים אופטימלית
 model = genai.GenerativeModel(
     model_name="gemini-1.5-pro", 
     generation_config=generation_config,
@@ -53,53 +56,53 @@ model = genai.GenerativeModel(
     
     הנחיות קריטיות:
     1. התבסס אך ורק על המידע בקובץ. אל תמציא נתונים.
-    2. אם המשתמש שואל על נתון (כמו הון עצמי) והוא לא מופיע בקובץ (למשל, כי זה רק דוח מילולי ללא המאזן המלא), ציין זאת במפורש: "הנתון אינו מופיע בקובץ זה, ייתכן והוא נמצא בדוחות הכספיים המלאים ולא בדוח הדירקטוריון".
+    2. אם המשתמש שואל על נתון (כמו הון עצמי) והוא לא מופיע בקובץ, ציין זאת במפורש.
     3. ענה בעברית מקצועית וברורה.
     4. הצג מספרים בפורמט קריא (עם פסיקים לאלפים).
     """
 )
 
-# --- פונקציות עזר לטיפול בקבצים ---
+# --- 6. פונקציות עזר ---
 def upload_to_gemini(path, mime_type="application/pdf"):
-    """מעלה את הקובץ לשרתים של גוגל לעיבוד"""
+    """מעלה קובץ לגוגל"""
     file = genai.upload_file(path, mime_type=mime_type)
     return file
 
 def wait_for_files_active(files):
-    """ממתין שהקובץ יהיה מוכן לעיבוד בצד של גוגל"""
+    """ממתין שהקובץ יהיה מוכן"""
     st.spinner('מעבד את הקובץ בשרתי Google AI...')
     for name in (file.name for file in files):
         file = genai.get_file(name)
         while file.state.name == "PROCESSING":
-            time.sleep(2) # בדיקה כל 2 שניות
+            time.sleep(2)
             file = genai.get_file(name)
         if file.state.name != "ACTIVE":
             raise Exception(f"File {file.name} failed to process")
 
-# --- ממשק המשתמש ---
+# --- 7. ממשק משתמש (Sidebar) ---
 with st.sidebar:
     st.header("הגדרות וקבצים")
     uploaded_file = st.file_uploader("העלה דוח כספי (PDF)", type=['pdf'])
     
     st.markdown("---")
-    st.info("💡 טיפ: לקבלת נתונים מדויקים על הון עצמי ומאזן, וודא שאתה מעלה את הקובץ המלא של **הדוחות הכספיים** ולא רק את דוח הדירקטוריון.")
+    st.info("💡 טיפ: לתוצאות מדויקות, העלה את קובץ 'הדוחות הכספיים' המלא.")
 
-# --- לוגיקה ראשית ---
+# --- 8. לוגיקה ראשית ---
 if uploaded_file:
-    # שמירת הקובץ באופן זמני
+    # שמירת קובץ זמני
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         tmp_path = tmp_file.name
 
     try:
-        # העלאה לגוגל
-        with st.spinner('מעלה את הקובץ ומפענח נתונים (מודל Pro)...'):
+        # שליחה לגוגל רק אם הקובץ חדש או שונה (אפשר לשכלל, כאן זה פשוט)
+        with st.spinner('מפענח את הדוח באמצעות Gemini Pro...'):
             gemini_file = upload_to_gemini(tmp_path)
             wait_for_files_active([gemini_file])
             
-        st.success("✅ הקובץ פוענח בהצלחה! אפשר לשאול שאלות.")
+        st.success("✅ הקובץ נקלט בהצלחה! המערכת מוכנה.")
 
-        # היסטוריית צ'אט
+        # ניהול היסטוריית צ'אט
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
@@ -108,30 +111,28 @@ if uploaded_file:
                 st.markdown(message["content"])
 
         # קלט משתמש
-        if prompt := st.chat_input("שאל שאלה על הדוח (למשל: מהו הרווח הכולל? מה יחס כושר הפירעון?)"):
-            # הצגת שאלת המשתמש
+        if prompt := st.chat_input("שאל שאלה על הדוח..."):
             st.chat_message("user").markdown(prompt)
             st.session_state.messages.append({"role": "user", "content": prompt})
 
-            # יצירת תשובה
             with st.chat_message("assistant"):
-                with st.spinner('מנתח נתונים...'):
-                    # שליחת הקובץ + השאלה למודל
-                    response = model.generate_content(
-                        [gemini_file, prompt],
-                        request_options={"timeout": 600} # זמן המתנה ארוך לקבצים גדולים
-                    )
-                    st.markdown(response.text)
-            
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+                with st.spinner('מנתח...'):
+                    try:
+                        response = model.generate_content(
+                            [gemini_file, prompt],
+                            request_options={"timeout": 600}
+                        )
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    except Exception as e:
+                        st.error(f"שגיאה בקבלת תשובה: {e}")
 
     except Exception as e:
         st.error(f"שגיאה בעיבוד הקובץ: {e}")
         
     finally:
-        # ניקוי קובץ זמני
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
 else:
-    st.info("👈 אנא העלה קובץ PDF בצד ימין כדי להתחיל.")
+    st.info("👈 נא להעלות קובץ PDF כדי להתחיל.")
