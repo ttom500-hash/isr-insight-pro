@@ -3,19 +3,20 @@ import google.generativeai as genai
 import os
 import time
 
-# --- 1. הגדרות וחיבור למנוע ---
+# --- 1. הגדרות וחיבור גמיש (מונע את השגיאה הקריטית) ---
 st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
 
-# משיכת המפתח מהסודות ששמרת
-api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+# מנסה למשוך את המפתח מכל שם אפשרי ששמרת ב-Secrets
+api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or st.secrets.get("A")
+
 if not api_key:
-    st.error("⛔ שגיאה: לא נמצא מפתח API תקין ב-Secrets.")
+    st.error("⛔ שגיאה: המפתח לא נמצא ב-Secrets. וודא שכתוב: GOOGLE_API_KEY = '...'")
     st.stop()
 
 genai.configure(api_key=api_key)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-# --- 2. מנוע סריקת קבצים (ממלא את התפריט הימני) ---
+# --- 2. מנוע סריקת קבצים (מחינו את 'אין כלום') ---
 BASE_DIR = "data/Insurance_Warehouse"
 
 def get_hierarchy():
@@ -31,7 +32,7 @@ def get_hierarchy():
                         hierarchy[company][year] = ["Q1", "Q2", "Q3", "Q4"]
     return hierarchy
 
-# --- 3. ממשק צד (ניווט וחיפוש) ---
+# --- 3. ממשק צד (ניווט) ---
 with st.sidebar:
     st.header("📂 ארכיון נתונים")
     data_map = get_hierarchy()
@@ -39,71 +40,51 @@ with st.sidebar:
     full_path = None
     if data_map:
         comp = st.selectbox("בחר חברה:", list(data_map.keys()))
-        year = st.selectbox("בחר שנה:", list(data_map[comp].keys()))
+        year = st.selectbox("בחר שנה:", sorted(list(data_map[comp].keys()), reverse=True))
         q = st.selectbox("בחר רבעון:", data_map[comp][year])
         
         report_dir = os.path.join(BASE_DIR, comp, year, q, "Financial_Reports")
         if os.path.exists(report_dir):
             files = [f for f in os.listdir(report_dir) if f.endswith(".pdf")]
             if files:
-                selected_file = st.selectbox("בחר דוח לניתוח:", files)
+                selected_file = st.selectbox("בחר דוח:", files)
                 full_path = os.path.join(report_dir, selected_file)
             else:
-                st.warning("אין קבצי PDF בתיקייה זו.")
-        else:
-            st.warning("לא נמצאו דוחות בנתיב זה.")
+                st.warning("לא נמצאו קבצי PDF.")
     else:
-        st.error("לא נמצאו נתונים בתיקיית data. וודא שהמבנה ב-GitHub תקין.")
+        st.error("לא נמצאה תיקיית נתונים ב-GitHub.")
 
-# --- 4. פונקציית ניתוח מול Gemini ---
-def analyze_report(file_path, prompt_text):
-    try:
-        # העלאת הקובץ ל-Gemini
-        uploaded_file = genai.upload_file(file_path, mime_type="application/pdf")
-        while uploaded_file.state.name == "PROCESSING":
-            time.sleep(1)
-            uploaded_file = genai.get_file(uploaded_file.name)
-        
-        # יצירת התשובה
-        response = model.generate_content([uploaded_file, prompt_text])
-        return response.text
-    except Exception as e:
-        return f"שגיאה בניתוח: {e}"
+# --- 4. פונקציית הניתוח ---
+def analyze(path, prompt):
+    with st.spinner("מנתח נתונים ברמה אקטוארית..."):
+        try:
+            f = genai.upload_file(path, mime_type="application/pdf")
+            while f.state.name == "PROCESSING": time.sleep(1); f = genai.get_file(f.name)
+            response = model.generate_content([f, prompt])
+            return response.text
+        except Exception as e: return f"שגיאה: {e}"
 
-# --- 5. גוף האפליקציה (התוכן) ---
-st.title("🏢 Apex Pro - דשבורד אנליסט ומפקח")
+# --- 5. תצוגת תוכן ---
+st.title("🏢 Apex Pro - דשבורד מפקח")
 
 if full_path:
-    st.success(f"נטען דוח: {selected_file}")
-    tab1, tab2, tab3 = st.tabs(["📊 ניתוח IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
+    st.success(f"נבחר דוח: {selected_file}")
+    t1, t2, t3 = st.tabs(["📊 IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
     
-    with tab1:
-        st.subheader("ניתוח עומק תקן IFRS 17")
-        if st.button("נתח תנועת CSM ומודלים"):
-            res = analyze_report(full_path, "נתח את תנועת ה-CSM לפי מודלים (GMM, VFA, PAA) וזהה חוזים מכבידים.")
-            st.markdown(res)
+    with t1:
+        if st.button("נתח CSM וחוזים מכבידים"):
+            st.markdown(analyze(full_path, "נתח תנועת CSM וזהה חוזים מכבידים."))
             
-    with tab2:
-        st.subheader("סימולציית תרחישי קיצון")
-        scenario = st.selectbox("בחר תרחיש:", ["רעידת אדמה", "עליית ריבית חדה", "קריסת שווקים"])
-        if st.button("הרץ מבחן לחץ 🚀"):
-            res = analyze_report(full_path, f"נתח את השפעת תרחיש {scenario} על יחס הסולבנסי וההון העצמי.")
-            st.markdown(res)
+    with t2:
+        scen = st.selectbox("תרחיש:", ["רעידת אדמה", "עליית ריבית", "קריסת שווקים"])
+        if st.button("הרץ סימולציה"):
+            st.markdown(analyze(full_path, f"נתח השפעת {scen} על יחס סולבנסי."))
 
-    with tab3:
-        st.subheader("בדיקת 5 מדדי ה-KPI הקריטיים")
-        st.info("בדיקה זו מבוססת על הצ'קליסט השמור בזיכרון המערכת.")
-        if st.button("הפעל ניתוח KPIs סופי"):
-            # שימוש ב-5 המדדים ששמרנו בזיכרון [cite: 2026-01-03]
-            kpi_prompt = """
-            נתח את 5 המדדים הבאים מהדוח:
-            1. יחס כושר פירעון (Solvency Ratio) [cite: 2026-01-03].
-            2. רווחיות להון (ROE) - השווה לרווח הנקי שראינו (למשל 246 מיליון ש"ח).
-            3. Combined Ratio (יעילות חיתומית) [cite: 2026-01-03].
-            4. תנועת CSM (צמיחת ערך עתידי) [cite: 2026-01-03].
-            5. יחס נזילות (פירעון מיידי) [cite: 2026-01-03].
-            """
-            res = analyze_report(full_path, kpi_prompt)
-            st.markdown(res)
+    with t3:
+        st.info("בדיקת 5 מדדי ה-KPI הקריטיים מהזיכרון [cite: 2026-01-03]")
+        if st.button("בצע ניתוח KPIs"):
+            # שימוש במדדים ששמרנו בזיכרון [cite: 2026-01-03]
+            p = "נתח: 1. יחס סולבנסי, 2. ROE, 3. Combined Ratio, 4. CSM, 5. נזילות." [cite: 2026-01-03]
+            st.markdown(analyze(full_path, p))
 else:
-    st.info("👈 אנא בחר דוח מהתפריט הימני כדי להתחיל.")
+    st.info("👈 בחר דוח מהתפריט הימני כדי להתחיל.")
