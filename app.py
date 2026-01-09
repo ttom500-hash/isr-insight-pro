@@ -15,7 +15,6 @@ st.set_page_config(page_title="Apex Pro Enterprise | Strategic AI Terminal", lay
 
 def initialize_ai():
     try:
-        # שימוש ב-Secrets של Streamlit לאבטחת מפתחות
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=api_key)
@@ -29,12 +28,11 @@ ai_ready = initialize_ai()
 @st.cache_resource
 def get_stable_model():
     if not ai_ready: return None, "None"
-    # תיקון שגיאת 404: שימוש בנתיב המודל המלא והמעודכן ביותר
+    # תיקון שגיאת 404: שימוש בנתיב מודל מלא ומעודכן לסביבת v1beta
     model_name = 'models/gemini-1.5-flash-latest'
     try:
         return genai.GenerativeModel(model_name), model_name
     except Exception:
-        # גיבוי אוטומטי למקרה של תקלה בנתיב המפורש
         return genai.GenerativeModel('gemini-1.5-flash'), 'gemini-1.5-flash'
 
 ai_model, active_model_name = get_stable_model()
@@ -45,34 +43,28 @@ ai_model, active_model_name = get_stable_model()
 BASE_WAREHOUSE = "data/Insurance_Warehouse"
 
 def get_verified_paths(company, year, quarter):
-    """סריקה אוטומטית של נתיבי הקבצים במבנה התיקיות ב-GitHub"""
     base = os.path.join(BASE_WAREHOUSE, company, str(year), quarter)
     fin_dir = os.path.join(base, "Financial_Reports")
     sol_dir = os.path.join(base, "Solvency_Reports")
-    
     fin_files = [os.path.join(fin_dir, f) for f in os.listdir(fin_dir) if f.endswith('.pdf')] if os.path.exists(fin_dir) else []
     sol_files = [os.path.join(sol_dir, f) for f in os.listdir(sol_dir) if f.endswith('.pdf')] if os.path.exists(sol_dir) else []
     return fin_files, sol_files
-
-def extract_hybrid_context(pdf_path):
-    """חילוץ היברידי מתקדם: טקסט מלא מ-15 דפים וצילום 3 דפים לניתוח Vision"""
-    text_buffer = ""
-    images = []
+    def extract_deep_context(pdf_path):
+    """סריקה עמוקה: מחלץ טקסט מ-50 דפים ותמונות מ-5 דפים ראשונים לניתוח הון עצמי"""
+    full_text = ""
+    preview_images = []
     try:
         doc = fitz.open(pdf_path)
-        # סריקה של עד 15 דפים ראשונים לטובת חילוץ נתונים מילוליים
-        for i in range(min(len(doc), 15)):
-            text_buffer += f"\n--- Page {i+1} ---\n" + doc[i].get_text()
-            # צילום הדפים הקריטיים לניתוח ויזואלי של טבלאות וגרפים
-            if i < 3:
+        for i in range(min(len(doc), 50)):
+            full_text += f"\n[Page {i+1}]\n" + doc[i].get_text()
+            if i < 5:
                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(2, 2))
-                img = Image.open(io.BytesIO(pix.tobytes()))
-                images.append(img)
-        return text_buffer, images
+                preview_images.append(Image.open(io.BytesIO(pix.tobytes())))
+        return full_text, preview_images
     except Exception as e:
-        return f"Error extracting PDF: {e}", []
+        return f"Error: {e}", []
 
-# נתוני שוק מלאים - KPI Checklist (מבוסס על ההגדרות שלך)
+# מסד הנתונים המלא כולל ה-KPIs הקריטיים
 market_df = pd.DataFrame({
     "חברה": ["Phoenix", "Harel", "Menora", "Clal", "Migdal"],
     "Solvency %": [184, 172, 175, 158, 149],
@@ -84,7 +76,7 @@ market_df = pd.DataFrame({
 })
 
 # ==========================================
-# 3. SIDEBAR - AUTOMATED CONTROL
+# 3. SIDEBAR - AUTOMATED RADAR
 # ==========================================
 with st.sidebar:
     st.header("🛡️ Database Radar")
@@ -92,29 +84,22 @@ with st.sidebar:
     sel_year = st.selectbox("שנה פיסקאלית:", [2024, 2025, 2026])
     sel_q = st.select_slider("רבעון דיווח:", options=["Q1", "Q2", "Q3", "Q4"])
     
-    # סריקה אוטומטית של נתיבי הקבצים מה-Repository
     fin_paths, sol_paths = get_verified_paths(sel_comp, sel_year, sel_q)
     
     st.divider()
-    st.subheader("📁 נתיבי קבצים זוהו:")
     if fin_paths:
-        st.success(f"✅ דוח כספי: {os.path.basename(fin_paths[0])[:15]}...")
+        st.success(f"✅ דוח כספי זוהה: {os.path.basename(fin_paths[0])[:15]}")
     else:
-        st.warning("❌ דוח כספי לא נמצא בתיקייה")
-        
-    if sol_paths:
-        st.success(f"✅ דוח סולבנסי זוהה")
-    
+        st.warning("❌ דוח כספי לא נמצא בנתיב")
     st.caption(f"AI Analytic Core: {active_model_name}")
-
-# ==========================================
-# 4. MAIN TERMINAL - FULL SUITE
+    # ==========================================
+# 4. MAIN TERMINAL - FULL FEATURES
 # ==========================================
 st.title(f"🏛️ {sel_comp} | Strategic AI Terminal")
 
 tabs = st.tabs(["📊 Critical KPIs", "⛓️ IFRS 17 Engine", "📈 Financial Ratios", "🛡️ Stress Scenarios", "🤖 AI Deep Research"])
 
-# --- TAB 1: 5 Critical KPIs ---
+# --- TAB 1: Critical KPIs ---
 with tabs[0]:
     row = market_df[market_df["חברה"] == sel_comp].iloc[0]
     st.subheader("מדדי ליבה - IFRS 17 & Solvency II")
@@ -126,136 +111,67 @@ with tabs[0]:
     k5.metric("Exp. Ratio", f"{row['Expense Ratio %']}%")
     
     st.divider()
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        st.plotly_chart(px.bar(market_df, x="חברה", y="CSM (B₪)", color="חברה", 
-                              title="השוואת עתודות רווח (CSM) במגזר הביטוח"), use_container_width=True)
-    with col_g2:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(px.bar(market_df, x="חברה", y="CSM (B₪)", color="חברה", title="השוואת עתודות רווח (CSM)"), use_container_width=True)
+    with c2:
         st.plotly_chart(px.pie(values=[60, 25, 15], names=["Life", "Health", "P&C"], title="Profit Mix by Segment"), use_container_width=True)
 
 # --- TAB 2: IFRS 17 ENGINE ---
 with tabs[1]:
     st.subheader("⛓️ IFRS 17: CSM Analytics & Waterfall")
-    st.markdown("#### ניתוח מודלי מדידה ומרכיב הפסד")
-    
-    m_col1, m_col2, m_col3 = st.columns(3)
-    m_col1.info("**VFA Approach**\n\nחיסכון ארוך טווח, ביטוח מנהלים (שינוי בערך נכסים עובר ל-CSM)")
-    m_col2.success("**GMM Approach**\n\nריסק, סיעוד, חיים מסורתי (שימוש בשיעור ריבית נעול)")
-    m_col3.warning("**PAA Approach**\n\nאלמנטר ובריאות קצר מועד (מודל פרמיה בלתי משוריינת)")
-    
-    st.divider()
-    
-    # גרף מפל CSM מלא
     fig_wf = go.Figure(go.Waterfall(
-        x = ["Opening", "New Business", "Changes", "Onerous", "Release", "Closing"],
+        x = ["Opening Balance", "New Business", "Exp. Adjustments", "Onerous Contracts", "Release to P&L", "Closing Balance"],
         y = [14200, 850, 150, -320, -1100, 13780],
         measure = ["absolute", "relative", "relative", "relative", "relative", "total"]
     ))
-    
     st.plotly_chart(fig_wf, use_container_width=True)
     
-    st.error(f"**Loss Component Alert:** בחוזים המכבידים זוהתה הפרשה מצטברת של ₪320M המוכרת בדו''ח רווח והפסד.")
-
-# --- TAB 3: FINANCIAL RATIOS ---
+    m1, m2, m3 = st.columns(3)
+    m1.info("**VFA Approach**\n\nVariable Fee Approach: ביטוחי מנהלים וחיסכון")
+    m2.success("**GMM Approach**\n\nGeneral Measurement Model: סיעוד וחיים מסורתי")
+    m3.warning("**PAA Approach**\n\nPremium Allocation Approach: אלמנטר ובריאות")
+    # --- TAB 3: FINANCIAL RATIOS ---
 with tabs[2]:
     st.subheader("📈 Financial Ratio Deep Analysis")
-    
-    st.markdown("#### 🏛️ יחסי חוסן ומאזן")
     b1, b2, b3 = st.columns(3)
     with b1:
         st.metric("Current Ratio", "1.42")
-        with st.expander("ℹ️ פירוט מקצועי"):
-            st.write("**הגדרה:** נכסים שוטפים / התחייבויות שוטפות. בביטוח, בודק את נזילות הנכסים מול התחייבויות מיידיות.")
+        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** נכסים שוטפים / התחייבויות שוטפות. בודק נזילות השקעות.")
     with b2:
         st.metric("Equity to Assets", "11.8%")
-        with st.expander("ℹ️ פירוט מקצועי"):
-            st.write("**הגדרה:** הון עצמי / סך מאזן. מציין את רמת המינוף והחוסן של החברה לספיגת הפסדים.")
+        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** הון עצמי / סך מאזן. רמת האיתנות ההונית.")
     with b3:
         st.metric("Financial Leverage", "7.8x")
-        with st.expander("ℹ️ פירוט מקצועי"):
-            st.write("**הגדרה:** סך הנכסים / הון עצמי. בודק כמה נכסים מנוהלים על כל שקל של הון עצמי.")
-
-    st.divider()
-    st.markdown("#### 💰 יחסי רווחיות ותזרים")
-    p1, p2, p3 = st.columns(3)
-    with p1:
-        st.metric("CFO to Net Profit", "1.15x")
-        st.caption("איכות הרווח והפיכתו למזומן (Cash Flow from Ops)")
-    with p2:
-        st.metric("NB Margin", f"{row['NB Margin %']}%")
-        st.caption("רווחיות עסקים חדשים (New Business Margin)")
-    with p3:
-        st.metric("Free Cash Flow", "₪1.18B")
-        st.caption("תזרים חופשי זמין לחלוקת דיבידנד או השקעה")
+        with st.expander("ℹ️ פירוט"): st.write("**הגדרה:** סך הנכסים / הון עצמי. מינוף ניהול הנכסים.")
 
 # --- TAB 4: STRESS SCENARIOS ---
 with tabs[3]:
-    st.subheader("🛡️ סימולציית תרחישי קיצון ורגישות הון (Stress Suite)")
-    col_in, col_res = st.columns([1, 1.2])
-    
-    with col_in:
-        st.write("### פרמטרים לקיצון")
-        ir_s = st.slider("📉 שינוי ריבית (bps)", -100, 100, 0)
-        mkt_s = st.slider("📉 ירידת מניות (%)", 0, 40, 0)
-        spr_s = st.slider("📉 מרווחי אשראי (bps)", 0, 150, 0)
-        lap_s = st.slider("📉 עלייה בביטולים (%)", 0, 20, 0)
-    
-    with col_res:
-        # לוגיקת השפעה חזויה על יחס הסולבנסי (מודל מקורב מבוסס רגישות הון)
-        total_impact = (ir_s * 0.12) - (mkt_s * 0.65) - (spr_s * 0.08) - (lap_s * 0.4)
-        final_solvency = row['Solvency %'] + total_impact
-        
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = final_solvency,
-            delta = {'reference': row['Solvency %']},
-            gauge = {'axis': {'range': [80, 250]},
-                     'steps': [
-                         {'range': [0, 100], 'color': "darkred"},
-                         {'range': [100, 140], 'color': "orange"},
-                         {'range': [140, 250], 'color': "green"}]}))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-        st.info(f"השפעה מצטברת חזויה על הון הסולבנסי: {total_impact:.1f}%")
+    st.subheader("🛡️ סימולציית תרחישי קיצון (Stress Suite)")
+    ir_s = st.slider("📉 ריבית (bps)", -100, 100, 0)
+    mkt_s = st.slider("📉 מניות (%)", 0, 40, 0)
+    impact = (ir_s * 0.12) - (mkt_s * 0.65)
+    new_sol = row['Solvency %'] + impact
+    fig_g = go.Figure(go.Indicator(
+        mode = "gauge+number+delta", value = new_sol, delta = {'reference': row['Solvency %']},
+        gauge = {'axis': {'range': [80, 250]}, 'steps': [{'range': [0, 100], 'color': "red"}, {'range': [100, 140], 'color': "orange"}]}))
+    st.plotly_chart(fig_g, use_container_width=True)
 
 # --- TAB 5: AI HYBRID RESEARCH ---
 with tabs[4]:
-    st.subheader("🤖 AI Hybrid Analyst (Vision + Note Scan)")
-    
+    st.subheader("🤖 AI Hybrid Analyst (Vision + Deep Text Scan)")
     if fin_paths:
-        st.success(f"האנליסט מוכן לניתוח היברידי של: {os.path.basename(fin_paths[0])}")
-        user_query = st.text_input("שאל שאלה מקצועית על הביאורים (למשל: 'נתח את הנחות האקטואריה בחישוב העתודות'):")
-        
-        if user_query and ai_ready:
-            with st.spinner("מבצע הצלבת נתונים (Text + Vision Scan)..."):
+        query = st.text_input("שאל שאלה מקצועית (למשל: 'מהו ההון העצמי המיוחס לבעלי המניות?'):")
+        if query and ai_ready:
+            with st.spinner("סורק את כל הדוח ומצליב נתונים..."):
                 try:
-                    # חילוץ תוכן היברידי מהדוח הכספי
-                    full_text, pages = extract_hybrid_context(fin_paths[0])
-                    
-                    with st.expander("צפה בדפים שנסרקו על ידי ה-AI (Vision Context)"):
+                    full_text, pages = extract_deep_context(fin_paths[0])
+                    with st.expander("צפה בדפים שנסרקו על ידי ה-AI"):
                         cols = st.columns(len(pages))
-                        for idx, p in enumerate(pages): 
-                            cols[idx].image(p, use_container_width=True, caption=f"Page {idx+1}")
-                    
-                    # בניית פרומפט מולטי-מודאלי עמוק המשלב טקסט ותמונה
-                    prompt = f"""
-                    אתה אנליסט פיננסי בכיר המתמחה בענף הביטוח וב-IFRS 17. 
-                    לפניך טקסט שחולץ מהדוח הכספי וצילום של הדפים המרכזיים.
-                    
-                    שאלה לניתוח: {user_query}
-                    
-                    הקשר טקסטואלי מהדוח:
-                    {full_text[:12000]}
-                    
-                    אנא הצלב בין הנתונים המילוליים לטבלאות שבתמונות וענה בעברית מקצועית.
-                    """
-                    
-                    # שליחה למודל עם הטקסט והתמונה הראשונה
+                        for idx, p in enumerate(pages): cols[idx].image(p, use_container_width=True)
+                    prompt = f"אתה אנליסט ביטוח בכיר. נתח את הטקסט והתמונות המצורפים מהדוח הכספי וענה בעברית מקצועית. חפש במפורש בטבלאות המאזן (Balance Sheet) בטקסט שחולץ.\n\nשאלה: {query}\n\nהקשר טקסטואלי מחולץ (50 דפים):\n{full_text[:15000]}"
                     response = ai_model.generate_content([prompt, pages[0]])
-                    
                     st.markdown("### 📝 תשובת האנליסט:")
-                    st.markdown(response.text)
-                    
-                except Exception as e:
-                    st.error(f"שגיאה בתהליך הניתוח: {e}")
-    else:
-        st.warning("⚠️ לא נמצא דוח PDF בנתיב המבוקש לסריקה אוטומטית. וודא שהעלית את הקבצים לתיקיית Financial_Reports.")
+                    st.write(response.text)
+                except Exception as e: st.error(f"שגיאה בניתוח: {e}")
+    else: st.warning("⚠️ לא נמצא דוח PDF לסריקה אוטומטית.")
