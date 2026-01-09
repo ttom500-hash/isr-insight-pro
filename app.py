@@ -7,8 +7,8 @@ import time
 
 # --- 1. הגדרת דף ---
 st.set_page_config(
-    page_title="Apex Pro Debugger",
-    page_icon="🛠️",
+    page_title="Apex Pro Enterprise",
+    page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -19,117 +19,149 @@ st.markdown("""
     .stApp { direction: rtl; }
     h1, h2, h3, p, div { text-align: right; }
     .stTextInput > div > div > input { text-align: right; }
+    .stSelectbox > div > div > div { text-align: right; }
     .stChatMessage { direction: rtl; text-align: right; }
+    .stDeployButton {display:none;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛠️ Apex Pro - מצב בדיקה")
+# --- 3. כותרת ---
+st.title("🏢 Apex Pro - מערכת ניתוח דוחות")
+st.caption("מופעל על ידי Gemini 1.5 Flash - המהיר ביותר")
 
-# --- 3. בדיקת מפתח ---
+# --- 4. הגדרת API ---
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=api_key)
-    # st.success("המפתח זוהה במערכת") # הוסר כדי לא להעמיס
 else:
-    st.error("❌ מפתח API חסר. בדוק את ה-Secrets.")
+    st.error("⚠️ מפתח API חסר ב-Secrets.")
     st.stop()
 
-# --- 4. הגדרת מודל ---
+# --- 5. הגדרת המודל (התיקון: מעבר ל-Flash) ---
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-pro", 
+    model_name="gemini-1.5-flash",  # <--- כאן השינוי החשוב!
     generation_config={"temperature": 0.1},
-    system_instruction="אתה אנליסט ביטוח. ענה בעברית."
+    system_instruction="אתה אנליסט ביטוח בכיר. התמחותך היא ב-IFRS 17 ו-Solvency II. ענה בעברית מקצועית, ברורה ותמציתית."
 )
 
-# --- 5. פונקציות ---
+# --- 6. פונקציות עזר ---
 def upload_to_gemini(path):
-    st.write(f"DEBUG: מתחיל העלאה של {path}...")
+    """מעלה קובץ לגוגל ומחזיר את האובייקט"""
+    # הדפסת דיבאג קטנה למסך
+    status_placeholder = st.empty()
+    status_placeholder.info("🚀 מעלה קובץ לענן...")
+    
     file = genai.upload_file(path, mime_type="application/pdf")
+    
+    # המתנה לעיבוד
     while file.state.name == "PROCESSING":
         time.sleep(1)
         file = genai.get_file(file.name)
+        
     if file.state.name != "ACTIVE":
-        raise Exception(f"הקובץ נכשל: {file.state.name}")
-    st.write("DEBUG: הקובץ עלה והוא ACTIVE")
+        status_placeholder.error("❌ הקובץ נכשל בעיבוד")
+        raise Exception(f"הקובץ נכשל בעיבוד: {file.state.name}")
+    
+    status_placeholder.empty() # ניקוי הודעה
     return file
 
-# --- 6. צד ימין ---
+# --- 7. צד ימין: ניהול קבצים ---
 base_path = "data/Insurance_Warehouse" 
-selected_file_path = None
 
 with st.sidebar:
-    st.header("בדיקת קבצים")
-    mode = st.radio("בחר:", ["GitHub", "ידני"])
+    st.header("🗄️ מקור הנתונים")
     
-    if mode == "GitHub":
-        if os.path.exists(base_path):
-            companies = os.listdir(base_path)
-            if companies:
-                comp = st.selectbox("חברה", companies)
-                # נתיב קשיח לבדיקה - נסה למצוא קובץ ראשון
-                year_path = os.path.join(base_path, comp, "2025", "Q1", "Financial_Reports")
-                if os.path.exists(year_path):
-                    files = [f for f in os.listdir(year_path) if f.endswith(".pdf")]
-                    if files:
-                        f = st.selectbox("קובץ", files)
-                        selected_file_path = os.path.join(year_path, f)
-                    else:
-                        st.warning("אין קבצים בתיקייה")
-                else:
-                    st.warning(f"נתיב לא קיים: {year_path}")
-        else:
-            st.error("אין תיקיית דאטה")
-    else:
-        uploaded = st.file_uploader("העלה קובץ")
-        if uploaded:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded.getvalue())
-                selected_file_path = tmp.name
+    mode = st.radio("בחר מצב:", ["ארכיון (GitHub)", "העלאה ידנית"])
+    
+    selected_file_path = None
+    uploaded_user_file = None
 
-# --- 7. לוגיקה ראשית ---
-if selected_file_path:
-    # טעינה
-    if "current_path" not in st.session_state or st.session_state.current_path != selected_file_path:
-        st.info("🔄 טוען קובץ חדש...")
+    if mode == "ארכיון (GitHub)":
+        if os.path.exists(base_path):
+            companies = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+            if companies:
+                col1, col2 = st.columns(2)
+                with col1:
+                    company = st.selectbox("חברה", companies)
+                with col2:
+                    year_path = os.path.join(base_path, company)
+                    years = [d for d in os.listdir(year_path) if os.path.isdir(os.path.join(year_path, d))] if os.path.exists(year_path) else ["2025"]
+                    year = st.selectbox("שנה", years)
+                    
+                quarter = st.selectbox("רבעון", ["Q1", "Q2", "Q3", "Q4"])
+                
+                search_path = os.path.join(base_path, company, year, quarter, "Financial_Reports")
+                
+                if os.path.exists(search_path):
+                    files = [f for f in os.listdir(search_path) if f.endswith(".pdf")]
+                    if files:
+                        selected_filename = st.selectbox("בחר דוח", files)
+                        selected_file_path = os.path.join(search_path, selected_filename)
+                    else:
+                        st.warning("אין קבצי PDF בתיקייה זו.")
+                else:
+                    st.warning("התיקייה ריקה.")
+            else:
+                st.warning("הארכיון ריק.")
+        else:
+            st.error("תיקיית הארכיון לא נמצאה.")
+            
+    else:
+        uploaded_user_file = st.file_uploader("גרור לכאן דוח כספי", type=['pdf'])
+
+# --- 8. לוגיקה ראשית ---
+final_path_to_process = selected_file_path
+
+# טיפול בקובץ ידני
+if uploaded_user_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(uploaded_user_file.getvalue())
+        final_path_to_process = tmp.name
+
+# מנגנון טעינה אוטומטי
+if final_path_to_process:
+    # בדיקה אם צריך לטעון מחדש
+    if "current_file_path" not in st.session_state or st.session_state.current_file_path != final_path_to_process:
         try:
-            gemini_file = upload_to_gemini(selected_file_path)
+            gemini_file = upload_to_gemini(final_path_to_process)
             st.session_state.gemini_file = gemini_file
-            st.session_state.current_path = selected_file_path
-            st.session_state.messages = []
-            st.success("✅ קובץ נטען!")
+            st.session_state.current_file_path = final_path_to_process
+            st.session_state.chat_history = [] 
+            st.toast("✅ הדוח מחובר!", icon="⚡")
         except Exception as e:
             st.error(f"שגיאה בטעינה: {e}")
+    
+    # שליפה מהזיכרון
+    if "gemini_file" in st.session_state:
+        current_file = st.session_state.gemini_file
 
-    # צ'אט
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+        # הצגת היסטוריה
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
+        for msg in st.session_state.chat_history:
+            st.chat_message(msg["role"]).write(msg["content"])
 
-    # קלט
-    if prompt := st.chat_input("כתוב שאלה..."):
-        st.chat_message("user").write(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # הדפסת דיבאג למסך כדי שתראה שזה עובד
-        debug_msg = st.empty()
-        debug_msg.info("⏳ שולח בקשה לגוגל... נא להמתין")
+        # קלט משתמש
+        if prompt := st.chat_input("שאל משהו על הדוח..."):
+            st.chat_message("user").write(prompt)
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
 
-        if "gemini_file" in st.session_state:
-            try:
-                # שימוש ב-stream=False לבדיקה ראשונית (יותר יציב לפעמים)
-                response = model.generate_content([st.session_state.gemini_file, prompt])
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                try:
+                    # הזרמת תשובה (Streaming)
+                    response = model.generate_content([current_file, prompt], stream=True)
+                    for chunk in response:
+                        if chunk.text:
+                            full_response += chunk.text
+                            message_placeholder.markdown(full_response + "▌")
+                    message_placeholder.markdown(full_response)
+                    st.session_state.chat_history.append({"role": "assistant", "content": full_response})
                 
-                debug_msg.empty() # מחיקת הודעת ההמתנה
-                
-                st.chat_message("assistant").write(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-            
-            except Exception as e:
-                debug_msg.error(f"❌ שגיאה בקבלת תשובה: {e}")
-        else:
-            st.error("אין קובץ בזיכרון")
+                except Exception as e:
+                    message_placeholder.error(f"שגיאה: {e}")
 
 else:
-    st.info("בחר קובץ")
+    st.info("👈 בחר דוח כדי להתחיל.")
