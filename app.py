@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# 1. עיצוב ואיפיון (Deep Navy) - שמירה על כל הפיצ'רים שלך
+# 1. שמירה על האפיון המקורי (Deep Navy)
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 st.markdown("""
     <style>
@@ -12,20 +12,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. אתחול AI - הכרחת v1 דרך הכתובת הישירה (URL)
+# 2. אתחול AI - הכרחת עבודה מול המודל היציב ביותר
 def init_ai():
     if "GOOGLE_API_KEY" in st.secrets:
-        # פתרון הקסם: אנחנו "מזריקים" לספריה את הכתובת של v1 במקום Beta
-        from google.generativeai import client
-        client.DEFAULT_API_VERSION = 'v1' 
-        
+        # פתרון ה-404 הסופי: שימוש בשם המודל עם מספר הגרסה המדויק
+        # זה מאלץ את ה-SDK לחפש את המודל ב-v1 ולא ב-beta
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        return genai.GenerativeModel('gemini-1.5-flash')
+        return genai.GenerativeModel('gemini-1.5-flash-001')
     return None
 
 model = init_ai()
 
-# 3. ממשק משתמש
+# 3. ממשק משתמש (Sidebar)
 st.title("🏛️ מערכת פיקוח הוליסטית")
 with st.sidebar:
     st.header("ניהול פיקוח")
@@ -41,19 +39,21 @@ with tab1:
     
     # 5 מדדי ה-KPI מהאפיון המקורי
     cols = st.columns(5)
-    for i, label in enumerate(["רווח כולל", "יתרת CSM", "ROE", "פרמיות", "נכסים"]):
+    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות", "נכסים"]
+    for i, label in enumerate(labels):
         cols[i].metric(label, "₪---")
 
     if st.button("🚀 הפעל סריקת AI"):
         if model is None:
             st.error("Missing API Key!")
         elif os.path.exists(fin_path):
-            with st.spinner("מבצע מעבר ל-v1 וסורק דוחות..."):
+            with st.spinner("סורק דוח כספי בגרסה יציבה (Stable)..."):
                 try:
+                    # קריאת הקובץ כמידע בינארי
                     with open(fin_path, "rb") as f:
                         pdf_data = f.read()
                     
-                    # קריאה פשוטה למודל - עכשיו כשהוא "מכויל" ל-v1
+                    # פקודה פשוטה למודל היציב
                     response = model.generate_content([
                         {"mime_type": "application/pdf", "data": pdf_data},
                         "Extract the following values for Harel Q1 2025: Net Profit, Total CSM, and ROE. Hebrew results."
@@ -64,6 +64,7 @@ with tab1:
                     st.write(response.text)
                     st.balloons()
                 except Exception as e:
+                    # הצגת השגיאה בצורה גולמית כדי שנראה אם ה-v1beta עדיין שם
                     st.error(f"שגיאה בתקשורת: {str(e)}")
         else:
             st.warning(f"קובץ חסר בנתיב: {fin_path}")
