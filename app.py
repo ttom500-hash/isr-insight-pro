@@ -1,91 +1,76 @@
 import streamlit as st
-import google.generativeai as genai
 import os
-import time
 
-# --- 1. הגדרות וחיבור ---
-st.set_page_config(page_title="Apex Pro Enterprise", layout="wide")
+# 1. הגדרות דף ועיצוב יוקרתי (UI/UX)
+st.set_page_config(page_title="Insurance Intelligence Pro", layout="wide")
 
-def get_api_key():
-    if "GOOGLE_API_KEY" in st.secrets: return st.secrets["GOOGLE_API_KEY"]
-    for key in st.secrets: return st.secrets[key]
-    return None
+# הזרקת סגנון נקי ומקצועי
+st.markdown("""
+    <style>
+    .main { background-color: #f4f7f9; }
+    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e1e4e8; }
+    .sidebar .sidebar-content { background-image: linear-gradient(#2e7bcf,#2e7bcf); color: white; }
+    </style>
+""", unsafe_allow_html=True)
 
-api_key = get_api_key()
-if not api_key:
-    st.error("לא נמצא מפתח API.")
-    st.stop()
+# 2. כותרת המערכת
+st.title("🏛️ מערכת פיקוח הוליסטית - חברות ביטוח")
+st.subheader("ניתוח דוחות כספיים ומדדי סולבנסי")
 
-genai.configure(api_key=api_key)
-
-@st.cache_resource
-def load_smart_model():
-    try:
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        model_name = next((m for m in available_models if "flash" in m), available_models[0])
-        return genai.GenerativeModel(model_name)
-    except:
-        return genai.GenerativeModel("gemini-1.5-flash")
-
-model = load_smart_model()
-
-# --- 2. מנוע סריקת קבצים ---
-BASE_DIR = "data/Insurance_Warehouse"
-
-def get_hierarchy():
-    hierarchy = {}
-    if os.path.exists(BASE_DIR):
-        for company in os.listdir(BASE_DIR):
-            c_path = os.path.join(BASE_DIR, company)
-            if os.path.isdir(c_path):
-                hierarchy[company] = {}
-                for year in sorted(os.listdir(c_path), reverse=True):
-                    y_path = os.path.join(c_path, year)
-                    if os.path.isdir(y_path):
-                        hierarchy[company][year] = ["Q1", "Q2", "Q3", "Q4"]
-    return hierarchy
-
-# --- 3. ממשק משתמש ---
-st.title("🏢 Apex Pro - דשבורד מפקח")
-
+# 3. ניווט ובחירת נתונים (Sidebar)
 with st.sidebar:
-    st.header("📂 ארכיון נתונים")
-    data_map = get_hierarchy()
-    full_path = None
-    if data_map:
-        comp = st.selectbox("חברה:", list(data_map.keys()))
-        year = st.selectbox("שנה:", list(data_map[comp].keys()))
-        q = st.selectbox("רבעון:", data_map[comp][year])
-        report_dir = os.path.join(BASE_DIR, comp, year, q, "Financial_Reports")
-        if os.path.exists(report_dir):
-            files = [f for f in os.listdir(report_dir) if f.endswith(".pdf")]
-            if files:
-                selected_file = st.selectbox("בחר דוח:", files)
-                full_path = os.path.join(report_dir, selected_file)
-
-# --- 4. ניתוח דוחות ---
-if full_path:
-    st.success(f"נבחר דוח: {selected_file}")
-    t1, t2, t3 = st.tabs(["📊 IFRS 17", "🌪️ תרחישי קיצון", "🏆 5 המדדים"])
+    st.image("https://www.gstatic.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png", width=100) # סמל זמני
+    st.header("פרמטרים לסריקה")
     
-    def run_analysis(p):
-        with st.spinner("מנתח נתונים..."):
-            try:
-                f = genai.upload_file(full_path, mime_type="application/pdf")
-                while f.state.name == "PROCESSING":
-                    time.sleep(2)
-                    f = genai.get_file(f.name)
-                response = model.generate_content([f, p])
-                genai.delete_file(f.name)
-                return response.text
-            except Exception as e:
-                return f"תקלה: {e}"
+    company = st.selectbox("בחר חברה:", ["Harel"])
+    year = st.selectbox("שנה:", ["2025"])
+    quarter = st.radio("רבעון דיווח:", ["Q1", "Q2", "Q3"])
+    
+    st.divider()
+    
+    # הגדרת נתיבי הקבצים לפי המבנה שבנינו בגיטהאב
+    base_path = f"data/{company}/{year}/{quarter}"
+    financial_file = f"{base_path}/financial/financial_report.pdf"
+    solvency_file = f"{base_path}/solvency/solvency_report.pdf"
+    
+    st.info(f"מקור נתונים: {company} {year} {quarter}")
 
-    with t3:
-        st.info("ניתוח 5 המדדים הקריטיים מהצ'קליסט השמור")
-        if st.button("בצע ניתוח KPIs מלא"):
-            # פקודה לניתוח 5 המדדים ששמרנו בזיכרון
-            prompt = "נתח מהדוח: 1. יחס סולבנסי, 2. ROE (בהתבסס על רווח נקי), 3. Combined Ratio, 4. CSM, 5. נזילות."
-            st.markdown(run_analysis(prompt))
-else:
-    st.info("👈 בחר דוח מהתפריט הימני.")
+# 4. גוף האפליקציה - תצוגת הנתונים
+tab1, tab2, tab3 = st.tabs(["📊 ניתוח פיננסי", "🛡️ יציבות (Solvency)", "📝 תובנות AI"])
+
+with tab1:
+    st.subheader(f"ניתוח דוח כספי - {company}")
+    
+    # בדיקת קיום קובץ בתיקייה
+    if os.path.exists(financial_file):
+        st.success(f"✅ הקובץ {os.path.basename(financial_file)} זוהה במערכת.")
+    else:
+        st.warning(f"🔎 ממתין לסנכרון קובץ בנתיב: {financial_file}")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("רווח כולל", "₪---M", "ממתין לסריקה")
+    with col2:
+        st.metric("הון עצמי", "₪---B", "ממתין לסריקה")
+    with col3:
+        st.metric("ROE (משוער)", "---%", "ממתין לסריקה")
+
+with tab2:
+    st.subheader(f"מדדי יציבות - Solvency II")
+    
+    if os.path.exists(solvency_file):
+        st.success(f"✅ קובץ סולבנסי זוהה: {os.path.basename(solvency_file)}")
+    else:
+        st.info("ℹ️ המערכת מוכנה לסריקת קובץ סולבנסי.")
+
+    c1, c2 = st.columns(2)
+    c1.metric("יחס סולבנסי", "---%", "ללא דגימה")
+    c2.metric("הון נדרש (SCR)", "₪---M", "ללא דגימה")
+
+with tab3:
+    st.subheader("סיכום מנהלים (AI Generated)")
+    st.write("כאן יוצגו 5 ה-KPI הקריטיים שביקשת לשמור לאחר חיבור ה-API Key.")
+    st.code("Status: Waiting for Google Gemini API Connection...")
+
+st.divider()
+st.caption("מערכת תומכת החלטות למפקח | פותח עבור ניתוח חברות ביטוח 2026")
