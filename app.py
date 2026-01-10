@@ -3,7 +3,7 @@ import requests
 import base64
 import os
 
-# --- 1. עיצוב Deep Navy (נשמר במדויק לפי האפיון) ---
+# --- 1. הגדרות עיצוב (Deep Navy) ---
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 st.markdown("""
     <style>
@@ -13,66 +13,93 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציית סריקה ישירה ל-v1 (עוקף שגיאת 404) ---
-def analyze_pdf_v1(file_path, api_key):
+# --- 2. פונקציית סריקה ישירה (עוקפת SDK) ---
+def analyze_pdf_direct(file_path, api_key):
+    # קריאת הקובץ והמרה ל-Base64
     with open(file_path, "rb") as f:
         pdf_data = base64.b64encode(f.read()).decode('utf-8')
     
-    # פנייה מפורשת ל-v1 היציב
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # כתובת ה-API הישירה למודל Pro בגרסה היציבה v1
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key={api_key}"
     
+    # גוף הבקשה
     payload = {
         "contents": [{
             "parts": [
-                {"text": "Analyze the attached report for Harel Insurance. Extract exactly: Net Profit, Total CSM balance, ROE, Gross Premiums, and Total Assets. Return the results in Hebrew."},
+                {"text": "You are an expert insurance regulator. Analyze the attached financial report for Harel Insurance. Extract exactly these 5 KPIs: 1. Net Profit, 2. Total CSM balance, 3. ROE, 4. Gross Premiums, 5. Total Assets. Return the results in Hebrew."},
                 {"inline_data": {"mime_type": "application/pdf", "data": pdf_data}}
             ]
         }]
     }
     
+    # שליחת הבקשה
     response = requests.post(url, json=payload)
+    
+    # בדיקת תקינות
     if response.status_code == 200:
-        return response.json()['candidates'][0]['content']['parts'][0]['text']
+        try:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        except KeyError:
+            return "התקבל פלט לא תקין מהמודל (מבנה JSON לא צפוי)."
     else:
-        raise Exception(f"API Error {response.status_code}: {response.text}")
+        # החזרת שגיאה מפורטת במקרה של כישלון
+        error_msg = response.json().get('error', {}).get('message', response.text)
+        raise Exception(f"API Error {response.status_code}: {error_msg}")
 
-# --- 3. ממשק משתמש ---
+# --- 3. ממשק המשתמש ---
 st.title("🏛️ מערכת פיקוח הוליסטית - Apex Pro")
 
+# סרגל צד
 with st.sidebar:
-    st.header("הגדרות מערכת")
-    api_key = st.secrets.get("GOOGLE_API_KEY")
+    st.header("ניהול פיקוח")
     company = st.selectbox("חברה", ["Harel"])
     year = st.selectbox("שנה", ["2025"])
     quarter = st.radio("רבעון", ["Q1"])
-    st.caption(f"Status: Direct v1 Routing")
+    
+    # שליפת המפתח מה-Secrets
+    api_key = st.secrets.get("GOOGLE_API_KEY")
+    if api_key:
+        st.success("API Key מחובר ✅")
+    else:
+        st.error("חסר מפתח API ב-Secrets ❌")
 
-tab1, tab2 = st.tabs(["📊 ניתוח IFRS 17", "🛡️ יציבות הון"])
+# גוף המערכת - טאבים
+tab1, tab2, tab3 = st.tabs(["📊 IFRS 17 ניתוח", "🛡️ סולבנסי", "🧪 סימולטור"])
 
 with tab1:
     fin_path = f"data/{company}/{year}/{quarter}/financial/financial_report.pdf"
     
-    # חמשת מדדי ה-KPI מהאפיון המקורי
+    # תצוגת 5 המדדים (KPIs)
     cols = st.columns(5)
-    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות ברוטו", "נכסים"]
+    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות ברוטו", "נכסים מנוהלים"]
     for i, label in enumerate(labels):
         cols[i].metric(label, "₪---")
 
-    if st.button("🚀 הפעל סריקת עומק"):
+    st.markdown("---")
+    
+    # כפתור הפעלה
+    if st.button("🚀 הפעל סריקת AI עמוקה (Pro)"):
         if not api_key:
-            st.error("Missing API Key in Secrets!")
-        elif os.path.exists(fin_path):
-            with st.spinner("מנתח דוח פיננסי בערוץ v1 היציב..."):
+            st.error("נא להגדיר GOOGLE_API_KEY ב-Secrets של האפליקציה.")
+        elif not os.path.exists(fin_path):
+            st.warning(f"לא נמצא קובץ PDF בנתיב: {fin_path}")
+        else:
+            with st.spinner("מנתח דוחות באמצעות Gemini 1.5 Pro..."):
                 try:
-                    result = analyze_pdf_v1(fin_path, api_key)
-                    st.success("הסריקה הושלמה!")
-                    st.markdown("### 🔍 ממצאי ה-AI:")
+                    # הפעלת הפונקציה הישירה
+                    result = analyze_pdf_direct(fin_path, api_key)
+                    
+                    st.success("הניתוח הושלם בהצלחה!")
+                    st.markdown("### 🔍 ממצאי הניתוח:")
                     st.write(result)
                     st.balloons()
+                    
                 except Exception as e:
-                    st.error(f"שגיאה בתקשורת: {str(e)}")
-        else:
-            st.warning(f"קובץ לא נמצא בנתיב: {fin_path}")
+                    st.error(f"שגיאה בתקשורת עם ה-AI: {str(e)}")
+
+with tab2:
+    st.subheader("מדדי Solvency II")
+    st.metric("יחס סולבנסי משוער", "---%", "יעד: >100%")
 
 st.divider()
-st.caption("Apex Pro - ניתוח מבוסס v1 Stable | 2026")
+st.caption("Apex Pro - מנוע Gemini 1.5 Pro | 2026")
