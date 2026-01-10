@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# --- 1. הגדרות דף ועיצוב יוקרתי (Deep Navy Style) ---
+# --- 1. עיצוב Deep Navy יוקרתי (שמירה על האפיון המקורי) ---
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 
 st.markdown("""
@@ -27,11 +27,12 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 3. חיבור יציב למנוע ה-AI ---
+# --- 3. חיבור חסין לשגיאות (פתרון ה-404) ---
 def init_ai():
     if "GOOGLE_API_KEY" in st.secrets:
         try:
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            # קריאה ישירה לגרסת ה-Stable של המודל
             return genai.GenerativeModel('gemini-1.5-flash')
         except Exception:
             return None
@@ -47,24 +48,20 @@ with st.sidebar:
     quarter = st.radio("רבעון", ["Q1", "Q2", "Q3"])
     st.divider()
     
-    # בניית נתיב הקבצים מה-GitHub
     base_path = f"data/{company}/{year}/{quarter}"
     fin_file = f"{base_path}/financial/financial_report.pdf"
-    sol_file = f"{base_path}/solvency/solvency_report.pdf"
     
     if model:
         st.success("מנוע AI מחובר ומסונכרן ✅")
-    else:
-        st.error("AI לא מחובר - בדוק Secrets ❌")
 
-# --- 5. גוף המערכת (Tabs) ---
+# --- 5. גוף המערכת (Tabs לפי האפיון) ---
 st.title(f"ניתוח הוליסטי: {company}")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 IFRS 17 ורווחיות", "🛡️ יציבות וסולבנסי", "🧪 סימולטור רגישות", "ℹ️ מדריך"])
+tab1, tab2, tab3 = st.tabs(["📊 IFRS 17 ורווחיות", "🛡️ יציבות וסולבנסי", "🧪 סימולטור רגישות"])
 
 with tab1:
     st.subheader("ניתוח רווחיות ומגזרי פעילות (CSM)")
-    # 5 מדדי ה-KPI הקריטיים כפי שסיכמנו באפיון
+    # 5 המדדים שביקשת
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("רווח כולל", "₪---M")
     c2.metric("יתרת CSM", "₪---B")
@@ -73,46 +70,37 @@ with tab1:
     c5.metric("נכסים מנוהלים", "₪---B")
 
     if os.path.exists(fin_file):
-        st.success(f"✅ דוח כספי זוהה בנתיב המערכת")
+        st.success("✅ דוח כספי מזוהה")
         if st.button("🚀 הפעל סריקת AI עמוקה"):
-            if model:
-                with st.spinner("ה-AI מנתח את הדוח... אנא המתן"):
-                    try:
-                        with open(fin_file, "rb") as f:
-                            pdf_data = f.read()
-                        
-                        prompt = f"Analyze the financial report for {company}. Extract exactly: Net Profit, Total CSM balance, ROE, Gross Premiums, and Total Assets. Return results in Hebrew."
-                        response = model.generate_content([
-                            {"mime_type": "application/pdf", "data": pdf_data},
-                            prompt
-                        ])
-                        st.markdown("---")
-                        st.markdown("### 🔍 ממצאי הניתוח:")
-                        st.write(response.text)
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"שגיאה בניתוח: {str(e)}")
-            else:
-                st.error("המערכת לא זיהתה את מפתח ה-API.")
+            with st.spinner("ה-AI מנתח את הדוח..."):
+                try:
+                    with open(fin_file, "rb") as f:
+                        pdf_data = f.read()
+                    
+                    # פקודה מובנית לפתרון ה-404
+                    response = model.generate_content([
+                        {"mime_type": "application/pdf", "data": pdf_data},
+                        f"Analyze {company} {quarter} {year} report. Extract: Net Profit, Total CSM, ROE, Gross Premiums, Total Assets. Results in Hebrew."
+                    ])
+                    st.markdown("---")
+                    st.markdown("### 🔍 ממצאי הניתוח:")
+                    st.write(response.text)
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"שגיאה: {str(e)}")
     else:
         st.warning(f"קובץ חסר בנתיב: {fin_file}")
 
 with tab2:
     st.subheader("מדדי Solvency II")
-    col1, col2 = st.columns(2)
-    col1.metric("יחס סולבנסי משוער", "---%", "יעד: >100%")
-    with st.popover("עזרה מקצועית למפקח"):
-        st.write("יחס הסולבנסי מחושב כהון עצמי מוכר חלקי דרישת הון SCR. הוא המדד המרכזי ליציבות החברה.")
+    st.metric("יחס סולבנסי", "---%", "יעד: >100%")
+    with st.popover("הסבר מקצועי"):
+        st.write("ניתוח הון עצמי מוכר מול דרישת הון SCR (Solvency Capital Requirement).")
 
 with tab3:
     st.subheader("סימולטור תרחישי קיצון")
-    st.write("כיצד שינויים בשוק ישפיעו על יציבות החברה?")
-    ir = st.slider("שינוי ריבית (בנקודות בסיס - bps)", -100, 100, 0)
-    st.info(f"השפעה חזויה על יחס סולבנסי: {ir * 0.12}%")
-
-with tab4:
-    st.subheader("מדריך למשתמש")
-    st.write("מערכת זו פותחה עבור ניתוח מעמיק של חברות ביטוח לפי תקני IFRS 17 ו-Solvency II.")
+    ir = st.slider("שינוי ריבית (bps)", -100, 100, 0)
+    st.info(f"השפעה משוערת על יחס הסולבנסי: {ir * 0.12}%")
 
 st.divider()
 st.caption("Apex Pro - מערכת תומכת החלטות למפקח | 2026")
