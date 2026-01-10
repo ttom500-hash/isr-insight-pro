@@ -2,73 +2,54 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# 1. הגדרות דף ועיצוב
-st.set_page_config(page_title="Insurance Intelligence Pro", layout="wide")
+# 1. הגדרות דף וחיבור ל-AI
+st.set_page_config(page_title="Insurance AI Monitor", layout="wide")
 
-st.markdown("""
-    <style>
-    .main { background-color: #f4f7f9; }
-    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e1e4e8; }
-    </style>
-""", unsafe_allow_html=True)
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    st.error("Missing API Key in Secrets!")
 
-# 2. פונקציית עזר לשליפת ה-API Key
-def get_api_key():
-    if "GOOGLE_API_KEY" in st.secrets:
-        return st.secrets["GOOGLE_API_KEY"]
-    return None
-
-# 3. כותרת המערכת
+# 2. כותרת
 st.title("🏛️ מערכת פיקוח הוליסטית - חברות ביטוח")
 
-# 4. ניווט (Sidebar)
+# 3. ניווט
 with st.sidebar:
-    st.header("פרמטרים לסריקה")
-    company = st.selectbox("בחר חברה:", ["Harel"])
-    year = st.selectbox("שנה:", ["2025"])
-    quarter = st.radio("רבעון דיווח:", ["Q1", "Q2", "Q3"])
-    
+    st.header("🔍 בחירת דוח")
+    company = st.selectbox("חברה", ["Harel"])
+    year = st.selectbox("שנה", ["2025"])
+    quarter = st.radio("רבעון", ["Q1"])
     st.divider()
-    base_path = f"data/{company}/{year}/{quarter}"
-    financial_file = f"{base_path}/financial/financial_report.pdf"
-    solvency_file = f"{base_path}/solvency/solvency_report.pdf"
-    
-    api_key = get_api_key()
-    if api_key:
-        st.success("AI Engine: Connected ✅")
-    else:
-        st.error("AI Engine: Disconnected ❌")
+    # נתיבים לקבצים
+    fin_path = f"data/{company}/{year}/{quarter}/financial/financial_report.pdf"
+    sol_path = f"data/{company}/{year}/{quarter}/solvency/solvency_report.pdf"
 
-# 5. גוף האפליקציה
-tab1, tab2, tab3 = st.tabs(["📊 ניתוח פיננסי", "🛡️ יציבות (Solvency)", "📝 תובנות AI"])
+# 4. תצוגה
+tab1, tab2 = st.tabs(["📊 ניתוח פיננסי", "🛡️ מדדי יציבות"])
 
 with tab1:
-    st.subheader(f"ניתוח דוח כספי - {company}")
-    if os.path.exists(financial_file):
-        st.success(f"✅ זוהה במערכת הקובץ: {os.path.basename(financial_file)}")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("רווח כולל", "₪---M", "ממתין לסריקה")
-        col2.metric("הון עצמי", "₪---B", "ממתין לסריקה")
-        col3.metric("ROE (משוער)", "---%", "ממתין לסריקה")
+    st.subheader(f"ניתוח {company} - {quarter}/{year}")
+    
+    if os.path.exists(fin_path):
+        st.success(f"✅ קובץ מזוהה: {os.path.basename(fin_path)}")
+        
+        if st.button("🚀 הפעל סריקת 5 מדדי KPI קריטיים"):
+            with st.spinner("ה-AI קורא את ה-PDF..."):
+                # כאן המערכת תבצע את השליפה האמיתית ברגע שנחבר את פונקציית הקריאה
+                st.info("📊 5 המדדים שנשמרו בניתוח:")
+                cols = st.columns(5)
+                cols[0].metric("רווח כולל", "₪---M")
+                cols[1].metric("הון עצמי", "₪---B")
+                cols[2].metric("ROE", "---%")
+                cols[3].metric("CSM", "₪---B")
+                cols[4].metric("פרמיות", "₪---M")
     else:
-        st.warning(f"🔎 קובץ לא נמצא בנתיב: {financial_file}")
+        st.warning(f"קובץ לא נמצא בנתיב: {fin_path}")
 
 with tab2:
-    st.subheader(f"מדדי יציבות - Solvency II")
-    if os.path.exists(solvency_file):
-        st.success(f"✅ זוהה במערכת הקובץ: {os.path.basename(solvency_file)}")
-        c1, c2 = st.columns(2)
-        c1.metric("יחס סולבנסי", "---%", "ממתין")
-        c2.metric("הון נדרש (SCR)", "₪---M", "ממתין")
+    st.subheader("מדדי סולבנסי")
+    if os.path.exists(sol_path):
+        st.metric("יחס סולבנסי (משוער)", "---%", "ממתין לסריקה")
     else:
-        st.info(f"ממתין להעלאת קובץ סולבנסי בנתיב: {solvency_file}")
-
-with tab3:
-    st.subheader("ניתוח חכם (AI Insights)")
-    if not api_key:
-        st.warning("אנא הגדר את ה-GOOGLE_API_KEY ב-Secrets של Streamlit כדי להפעיל את הניתוח.")
-    else:
-        st.info("מנוע ה-AI מוכן לניתוח 5 מדדי ה-KPI הקריטיים.")
-
-st.divider()
-st.caption("מערכת תומכת החלטות למפקח | Insurance Intelligence App 2026")
+        st.info("העלה דוח סולבנסי כדי לראות נתונים כאן.")
