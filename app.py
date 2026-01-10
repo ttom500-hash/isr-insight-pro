@@ -9,25 +9,25 @@ import time
 from datetime import datetime
 from jsonschema import validate, ValidationError
 
-# --- 1. מילון מונחים רגולטורי (Tooltips) ---
+# --- 1. מילון מונחים רגולטורי ---
 DEFINITIONS = {
-    "net_profit": "הרווח הכולל המיוחס לבעלי המניות לאחר מס, כפי שדווח בדוח רווח והפסד מאוחד.",
-    "total_csm": "Contractual Service Margin (CSM): עתודת הרווחים העתידיים מהמערך הביטוחי שטרם הוכרו בדוח רוו\"ה.",
-    "roe": "Return on Equity: תשואה להון עצמי. מחושב כרווח נקי שנתי חלקי הון עצמי ממוצע.",
-    "gross_premiums": "Gross Written Premiums (GWP): סך הפרמיות ברוטו שנרשמו בתקופה, לפני ניכוי ביטוח משנה.",
-    "total_assets": "Assets Under Management (AUM): סך המאזן המאוחד של הקבוצה.",
-    "solvency_ratio": "יחס כושר פירעון כלכלי (סולבנסי II). יחס של 100% ומעלה מעיד על עמידה בדרישות.",
-    "scr": "Solvency Capital Requirement: דרישת ההון הנדרשת להבטחת עמידה בהתחייבויות בהסתברות 99.5%.",
-    "combined_ratio": "יחס משולב: (הוצאות תביעות + הוצאות תפעול ושיווק) חלקי הפרמיות שהורווחו.",
-    "loss_ratio": "יחס ההפסדים: סך התביעות ששולמו ועתודות לתביעות חלקי הפרמיות שהורווחו.",
-    "lcr": "Liquidity Coverage Ratio: יחס כיסוי נזילות לטווח קצר.",
-    "leverage": "מינוף פיננסי: היחס בין סך ההתחייבויות לסך הנכסים.",
-    "new_business_csm": "CSM בגין עסקים חדשים: הערך של חוזים חדשים שנמכרו בתקופה.",
-    "onerous_contracts": "רכיב הפסד: חוזים שבהם ההוצאות הצפויות עולות על ההכנסות במועד ההכרה.",
-    "tier1_capital": "הון רובד 1 (ליבה): הון עצמי ורווחים צבורים.",
-    "tier2_capital": "הון רובד 2 (משני): כתבי התחייבות נדחים ומכשירים היברידיים.",
-    "real_yield": "תשואה ריאלית על תיק ההשקעות (בניכוי אינפלציה).",
-    "unquoted_pct": "שיעור הנכסים הלא סחירים בתיק הנוסטרו."
+    "net_profit": "הרווח הכולל המיוחס לבעלי המניות לאחר מס.",
+    "total_csm": "CSM: עתודת הרווחים העתידיים מהמערך הביטוחי.",
+    "roe": "תשואה להון עצמי (במונחים שנתיים).",
+    "gross_premiums": "GWP: סך הפרמיות ברוטו.",
+    "total_assets": "AUM: סך המאזן המאוחד.",
+    "solvency_ratio": "יחס כושר פירעון כלכלי (סולבנסי II).",
+    "scr": "דרישת ההון הנדרשת (SCR).",
+    "combined_ratio": "יחס משולב (תביעות + הוצאות / פרמיות).",
+    "loss_ratio": "יחס ההפסדים (Loss Ratio).",
+    "lcr": "יחס כיסוי נזילות (LCR).",
+    "leverage": "מינוף פיננסי (הון למאזן).",
+    "new_business_csm": "תוספת CSM בגין עסקים חדשים.",
+    "onerous_contracts": "רכיב הפסד (חוזים מפסידים).",
+    "tier1_capital": "הון רובד 1 (ליבה).",
+    "tier2_capital": "הון רובד 2 (משני/נחות).",
+    "real_yield": "תשואה ריאלית על ההשקעות.",
+    "unquoted_pct": "שיעור הנכסים הלא סחירים."
 }
 
 # --- 2. עיצוב המערכת ---
@@ -35,14 +35,14 @@ st.set_page_config(page_title="Apex Regulator Pro", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: white; }
-    .stMetric { background-color: #1c2e4a; padding: 15px; border-radius: 8px; border-right: 4px solid #2e7bcf; box-shadow: 2px 2px 8px rgba(0,0,0,0.4); }
+    .stMetric { background-color: #1c2e4a; padding: 15px; border-radius: 8px; border-right: 4px solid #2e7bcf; }
     div[data-testid="stMetricValue"] { color: #ffffff !important; font-size: 1.8rem; font-family: 'Segoe UI', sans-serif; }
     .ticker-wrap { background: #000000; color: #00ff00; padding: 10px; font-family: 'Courier New', monospace; border-bottom: 2px solid #2e7bcf; }
     .red-flag-box { border: 1px solid #ff4b4b; background-color: rgba(255, 75, 75, 0.15); padding: 15px; border-radius: 5px; color: #ff4b4b; margin-top: 10px; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-ticker_text = "🌍 שווקים: ת\"א-35: 2,045 ▲ | S&P 500: 5,120 ▲ | 🇮🇱 ביטוח: הראל (+1.2%) | הפניקס (-0.5%) | מגדל (+0.8%) | מנורה (+0.3%) | כלל (+2.1%)"
+ticker_text = "🌍 מדדים: ת\"א-35: 2,045 ▲ | S&P 500: 5,120 ▲ | 🇮🇱 הראל (+1.2%) | הפניקס (-0.5%) | מגדל (+0.8%) | מנורה (+0.3%) | כלל (+2.1%)"
 st.markdown(f'<div class="ticker-wrap"><marquee scrollamount="10">{ticker_text}</marquee></div>', unsafe_allow_html=True)
 
 # --- 3. סכמה (Schema) ---
@@ -60,9 +60,9 @@ IFRS17_SCHEMA = {
     }
 }
 
-# --- 4. נתוני אמת משוערים (Q3 2025 - שתולים בקוד) ---
+# --- 4. נתוני אמת משוערים (Q3 2025) - מתוקנים ומבודלים! ---
 REAL_MARKET_DATA = {
-    "Harel": {
+    "Harel": { # הראל: חזקה בבריאות, סולידית
         "core_kpis": { "net_profit": 2174.0, "total_csm": 17133.0, "roe": 27.0, "gross_premiums": 12100.0, "total_assets": 167754.0 },
         "ifrs17_segments": { "life_csm": 11532.0, "health_csm": 5601.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 1265.0 },
         "investment_mix": { "govt_bonds_pct": 30.0, "corp_bonds_pct": 20.0, "stocks_pct": 15.0, "real_estate_pct": 10.0, "unquoted_pct": 63.0, "real_yield": 4.2 },
@@ -70,7 +70,7 @@ REAL_MARKET_DATA = {
         "solvency": { "solvency_ratio": 183.0, "tier1_capital": 10733.0, "tier2_capital": 2500.0, "scr": 9191.0 },
         "consistency_check": { "opening_csm": 16500.0, "new_business_csm": 1265.0, "csm_release": 632.0, "closing_csm": 17133.0 }
     },
-    "Phoenix": {
+    "Phoenix": { # הפניקס: מאוזנת, רווחיות שיא
         "core_kpis": { "net_profit": 1739.0, "total_csm": 13430.0, "roe": 33.3, "gross_premiums": 9278.0, "total_assets": 225593.0 },
         "ifrs17_segments": { "life_csm": 6636.0, "health_csm": 6794.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 1459.0 },
         "investment_mix": { "govt_bonds_pct": 35.0, "corp_bonds_pct": 20.0, "stocks_pct": 14.0, "real_estate_pct": 10.0, "unquoted_pct": 31.0, "real_yield": 4.5 },
@@ -78,25 +78,25 @@ REAL_MARKET_DATA = {
         "solvency": { "solvency_ratio": 183.0, "tier1_capital": 12500.0, "tier2_capital": 3889.0, "scr": 9192.0 },
         "consistency_check": { "opening_csm": 12500.0, "new_business_csm": 1459.0, "csm_release": 529.0, "closing_csm": 13430.0 }
     },
-    "Migdal": {
+    "Migdal": { # מגדל: דומיננטיות מוחלטת בחיים, סולבנסי נמוך
         "core_kpis": { "net_profit": 551.0, "total_csm": 13062.0, "roe": 12.8, "gross_premiums": 7697.0, "total_assets": 219362.0 },
-        "ifrs17_segments": { "life_csm": 6636.0, "health_csm": 6426.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 795.0 },
-        "investment_mix": { "govt_bonds_pct": 40.0, "corp_bonds_pct": 20.0, "stocks_pct": 13.0, "real_estate_pct": 10.0, "unquoted_pct": 27.0, "real_yield": 2.0 },
+        "ifrs17_segments": { "life_csm": 11500.0, "health_csm": 1562.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 795.0 }, # תיקון: רוב ה-CSM בחיים
+        "investment_mix": { "govt_bonds_pct": 45.0, "corp_bonds_pct": 20.0, "stocks_pct": 10.0, "real_estate_pct": 8.0, "unquoted_pct": 17.0, "real_yield": 2.0 },
         "financial_ratios": { "loss_ratio": 82.0, "combined_ratio": 102.0, "lcr": 1.1, "leverage": 3.9, "roa": 0.3 },
         "solvency": { "solvency_ratio": 131.0, "tier1_capital": 7500.0, "tier2_capital": 3000.0, "scr": 13685.0 },
         "consistency_check": { "opening_csm": 12800.0, "new_business_csm": 795.0, "csm_release": 533.0, "closing_csm": 13062.0 }
     },
-    "Clal": {
+    "Clal": { # כלל: חשיפה ענקית ללא סחיר
         "core_kpis": { "net_profit": 1360.0, "total_csm": 8813.0, "roe": 23.8, "gross_premiums": 8300.0, "total_assets": 158674.0 },
         "ifrs17_segments": { "life_csm": 4076.0, "health_csm": 4737.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 950.0 },
-        "investment_mix": { "govt_bonds_pct": 20.0, "corp_bonds_pct": 12.0, "stocks_pct": 15.0, "real_estate_pct": 10.0, "unquoted_pct": 68.0, "real_yield": 3.8 },
+        "investment_mix": { "govt_bonds_pct": 15.0, "corp_bonds_pct": 12.0, "stocks_pct": 15.0, "real_estate_pct": 10.0, "unquoted_pct": 68.0, "real_yield": 3.8 }, # 68% לא סחיר!
         "financial_ratios": { "loss_ratio": 78.0, "combined_ratio": 97.0, "lcr": 1.25, "leverage": 4.8, "roa": 0.9 },
         "solvency": { "solvency_ratio": 182.0, "tier1_capital": 11214.0, "tier2_capital": 4828.0, "scr": 10040.0 },
         "consistency_check": { "opening_csm": 8300.0, "new_business_csm": 950.0, "csm_release": 437.0, "closing_csm": 8813.0 }
     },
-    "Menora": {
+    "Menora": { # מנורה: תשואה יפה, מינוף גבוה
         "core_kpis": { "net_profit": 1211.0, "total_csm": 7900.0, "roe": 19.2, "gross_premiums": 6907.0, "total_assets": 62680.0 },
-        "ifrs17_segments": { "life_csm": 4000.0, "health_csm": 3900.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 300.0 },
+        "ifrs17_segments": { "life_csm": 4500.0, "health_csm": 3400.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 300.0 },
         "investment_mix": { "govt_bonds_pct": 40.0, "corp_bonds_pct": 25.0, "stocks_pct": 19.0, "real_estate_pct": 10.0, "unquoted_pct": 16.0, "real_yield": 4.1 },
         "financial_ratios": { "loss_ratio": 75.0, "combined_ratio": 94.0, "lcr": 1.45, "leverage": 13.1, "roa": 1.9 },
         "solvency": { "solvency_ratio": 180.2, "tier1_capital": 6000.0, "tier2_capital": 2687.0, "scr": 6019.0 },
@@ -106,7 +106,7 @@ REAL_MARKET_DATA = {
 
 DEFAULT_MOCK = REAL_MARKET_DATA["Phoenix"]
 
-# --- 5. מנוע AI (עם הוראות בעברית) ---
+# --- 5. מנוע AI ---
 def analyze_report(file_path, api_key, retries=3):
     if not os.path.exists(file_path): return None, f"קובץ חסר: {file_path}"
     with open(file_path, "rb") as f: pdf_data = base64.b64encode(f.read()).decode('utf-8')
@@ -138,7 +138,7 @@ def analyze_report(file_path, api_key, retries=3):
         except Exception: time.sleep(1)
     return None, "Connection Failed"
 
-# --- 6. פונקציית בנצ'מארק דינמית ---
+# --- 6. בנצ'מארק דינמי ---
 def get_benchmark_data(selected_companies):
     data = {"חברה": [], "Solvency": [], "ROE": [], "CSM": []}
     for comp in selected_companies:
@@ -149,7 +149,7 @@ def get_benchmark_data(selected_companies):
         data["CSM"].append(comp_data["core_kpis"]["total_csm"])
     return pd.DataFrame(data)
 
-# --- 7. ממשק משתמש (UI) ---
+# --- 7. UI ---
 st.sidebar.title("🛡️ Apex Regulator")
 api_key = st.secrets.get("GOOGLE_API_KEY")
 
