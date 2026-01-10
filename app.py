@@ -1,9 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
-from google.generativeai.types import RequestOptions
 import os
 
-# 1. עיצוב ואיפיון (Deep Navy) - שמירה קפדנית על העיצוב שלך
+# 1. עיצוב ואיפיון (Deep Navy) - שמירה על כל הפיצ'רים שלך
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 st.markdown("""
     <style>
@@ -13,20 +12,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. אתחול AI - הכרחת שימוש ב-v1
+# 2. אתחול AI - הכרחת v1 דרך הכתובת הישירה (URL)
 def init_ai():
     if "GOOGLE_API_KEY" in st.secrets:
+        # פתרון הקסם: אנחנו "מזריקים" לספריה את הכתובת של v1 במקום Beta
+        from google.generativeai import client
+        client.DEFAULT_API_VERSION = 'v1' 
+        
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        # יצירת מודל עם הגדרה מפורשת לגרסה v1
-        return genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            # פתרון ה-404: עקיפת ה-beta דרך RequestOptions
-        )
+        return genai.GenerativeModel('gemini-1.5-flash')
     return None
 
 model = init_ai()
 
-# 3. ממשק משתמש (Sidebar)
+# 3. ממשק משתמש
 st.title("🏛️ מערכת פיקוח הוליסטית")
 with st.sidebar:
     st.header("ניהול פיקוח")
@@ -40,29 +39,25 @@ tab1, tab2 = st.tabs(["📊 IFRS 17 ניתוח", "🛡️ סולבנסי"])
 with tab1:
     fin_path = f"data/{company}/{year}/{quarter}/financial/financial_report.pdf"
     
-    # תצוגת 5 המדדים מהאפיון המקורי
+    # 5 מדדי ה-KPI מהאפיון המקורי
     cols = st.columns(5)
-    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות", "נכסים"]
-    for i, label in enumerate(labels):
+    for i, label in enumerate(["רווח כולל", "יתרת CSM", "ROE", "פרמיות", "נכסים"]):
         cols[i].metric(label, "₪---")
 
     if st.button("🚀 הפעל סריקת AI"):
         if model is None:
             st.error("Missing API Key!")
         elif os.path.exists(fin_path):
-            with st.spinner("מנתח דוחות בנתיב v1 Stable..."):
+            with st.spinner("מבצע מעבר ל-v1 וסורק דוחות..."):
                 try:
                     with open(fin_path, "rb") as f:
                         pdf_data = f.read()
                     
-                    # שימוש ב-RequestOptions כדי להכריח את ה-API להשתמש ב-v1
-                    response = model.generate_content(
-                        [
-                            {"mime_type": "application/pdf", "data": pdf_data},
-                            "נתח את הדוח הכספי ושלוף: רווח נקי, יתרת CSM ותשואה להון (ROE). החזר תוצאות בעברית."
-                        ],
-                        request_options=RequestOptions(api_version='v1')
-                    )
+                    # קריאה פשוטה למודל - עכשיו כשהוא "מכויל" ל-v1
+                    response = model.generate_content([
+                        {"mime_type": "application/pdf", "data": pdf_data},
+                        "Extract the following values for Harel Q1 2025: Net Profit, Total CSM, and ROE. Hebrew results."
+                    ])
                     
                     st.success("הסריקה הושלמה!")
                     st.markdown("### 🔍 ממצאים:")
@@ -74,4 +69,4 @@ with tab1:
             st.warning(f"קובץ חסר בנתיב: {fin_path}")
 
 st.divider()
-st.caption("Apex Pro | 2026")
+st.caption("Apex Pro - מערכת תומכת החלטות למפקח | 2026")
