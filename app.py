@@ -3,7 +3,7 @@ import requests
 import base64
 import os
 
-# --- 1. עיצוב וסגנון ---
+# --- 1. עיצוב המערכת (Deep Navy) ---
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 st.markdown("""
     <style>
@@ -13,86 +13,77 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציית הליבה: ניתוח עם גיבוי (Fallback) ---
-def analyze_pdf(file_path, api_key):
-    with open(file_path, "rb") as f:
-        pdf_base64 = base64.b64encode(f.read()).decode('utf-8')
-    
-    # רשימת מודלים לניסיון בסדר עדיפות
-    models_to_try = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
-    
-    last_error = ""
-    for model_name in models_to_try:
-        # שימוש ב-v1beta - הנתיב הכי בטוח למניעת 404 ב-2026
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-        
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": "Analyze this report for Harel Insurance. Extract: Net Profit, Total CSM, ROE, Gross Premiums, Total Assets. Hebrew results."},
-                    {"inline_data": {"mime_type": "application/pdf", "data": pdf_base64}}
-                ]
-            }]
-        }
-        
-        try:
-            response = requests.post(url, json=payload)
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text'], model_name
-            else:
-                last_error = response.text
-                continue # נסיון המודל הבא ברשימה
-        except Exception as e:
-            last_error = str(e)
-            continue
+# --- 2. פונקציות אבחון ותקשורת ---
+def get_available_models(api_key):
+    """בודק איזה מודלים המפתח שלך באמת יכול לראות"""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        models = response.json().get('models', [])
+        return [m['name'].split('/')[-1] for m in models if 'generateContent' in m['supportedGenerationMethods']]
+    return []
 
-    raise Exception(f"כל המודלים נכשלו. שגיאה אחרונה: {last_error}")
+def analyze_report(file_path, api_key, model_name):
+    """ביצוע הסריקה בפועל"""
+    with open(file_path, "rb") as f:
+        pdf_data = base64.b64encode(f.read()).decode('utf-8')
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": "Analyze this insurance report. Extract: Net Profit, CSM, ROE. Hebrew results."},
+                {"inline_data": {"mime_type": "application/pdf", "data": pdf_data}}
+            ]
+        }]
+    }
+    response = requests.post(url, json=payload)
+    if response.status_code == 200:
+        return response.json()['candidates'][0]['content']['parts'][0]['text']
+    return f"שגיאה במודל {model_name}: {response.text}"
 
 # --- 3. ממשק משתמש ---
-st.title("🏛️ Apex Pro - מערכת פיקוח חכמה")
+st.title("🏛️ חדר בקרה - Apex Pro")
+
+api_key = st.secrets.get("GOOGLE_API_KEY")
 
 with st.sidebar:
-    st.header("ניהול והגדרות")
-    api_key = st.secrets.get("GOOGLE_API_KEY")
-    if api_key:
-        st.success("API Key מחובר ✅")
-    
-    company = st.selectbox("חברה", ["Harel"])
-    year = st.selectbox("שנה", ["2025"])
-    quarter = st.radio("רבעון", ["Q1"])
-    
-    # כפתור אבחון למקרה של תקלות
-    if st.button("🔍 אבחון זמינות מודלים"):
-        diag_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-        diag_res = requests.get(diag_url)
-        st.write(diag_res.json())
+    st.header("אבחון מערכת")
+    if st.button("🔍 בדוק מודלים זמינים במפתח שלי"):
+        if api_key:
+            models = get_available_models(api_key)
+            if models:
+                st.write("מודלים שזמינים עבורך:")
+                st.success(", ".join(models))
+            else:
+                st.error("המפתח שלך לא מורשה לאף מודל Gemini. צור מפתח חדש ב-AI Studio.")
+        else:
+            st.error("מפתח API לא הוגדר ב-Secrets.")
 
-tab1, tab2 = st.tabs(["📊 ניתוח פיננסי", "🛡️ סולבנסי"])
+tab1, tab2 = st.tabs(["📊 IFRS 17 ניתוח", "🛡️ סולבנסי"])
 
 with tab1:
-    fin_path = f"data/{company}/{year}/{quarter}/financial/financial_report.pdf"
+    company = st.selectbox("חברה", ["Harel"])
+    fin_path = f"data/{company}/2025/Q1/financial/financial_report.pdf"
     
-    # תצוגת 5 המדדים ששמרנו באפיון
+    # 5 המדדים ששמרנו עבורך
     cols = st.columns(5)
-    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות ברוטו", "נכסים"]
-    for i, label in enumerate(labels):
+    for i, label in enumerate(["רווח כולל", "יתרת CSM", "ROE", "פרמיות", "נכסים"]):
         cols[i].metric(label, "₪---")
 
-    if st.button("🚀 הפעל סריקה חסינת כשל"):
-        if not api_key:
-            st.error("API Key missing in Secrets!")
-        elif os.path.exists(fin_path):
-            with st.spinner("מנסה להתחבר למודל הפנוי ביותר..."):
-                try:
-                    text_result, used_model = analyze_pdf(fin_path, api_key)
-                    st.success(f"הסריקה הושלמה באמצעות {used_model}!")
-                    st.markdown("### 🔍 ממצאי ה-AI:")
-                    st.write(text_result)
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"שגיאה קריטית: {str(e)}")
+    if st.button("🚀 הפעל סריקה"):
+        if os.path.exists(fin_path):
+            with st.spinner("מנסה את המודל הטוב ביותר..."):
+                # ניסיון אוטומטי לפי סדר עדיפויות
+                success = False
+                for m in ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]:
+                    result = analyze_report(fin_path, api_key, m)
+                    if "Error" not in result and "שגיאה" not in result:
+                        st.success(f"בוצע באמצעות: {m}")
+                        st.write(result)
+                        success = True
+                        break
+                if not success:
+                    st.error("כל המודלים נחסמו. וודא שמפתח ה-API הופק ב-AI Studio.")
         else:
-            st.warning(f"קובץ חסר בנתיב: {fin_path}")
-
-st.divider()
-st.caption("Apex Pro - Integrated Insurance Intelligence | 2026")
+            st.error(f"קובץ חסר: {fin_path}")
