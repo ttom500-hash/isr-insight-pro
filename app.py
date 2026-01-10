@@ -10,113 +10,100 @@ import time
 from datetime import datetime
 from jsonschema import validate, ValidationError
 
-# --- 1. מילון מונחים מורחב (Encyclopedia) ---
+# --- 1. מילון מונחים (Tooltips) ---
 DEFINITIONS = {
-    # KPIs
-    "net_profit": "הרווח הכולל לבעלי המניות. ירידה חדה עשויה להעיד על אירועים חד פעמיים או שחיקה בחיתום.",
-    "total_csm": "Contractual Service Margin: 'מחסנית הרווחים' העתידית. שחיקה ב-CSM היא אינדיקטור שלילי לצמיחה עתידית.",
-    "roe": "תשואה להון עצמי. בנצ'מארק ענפי: 10%-15%.",
-    "gross_premiums": "GWP: צמיחה בפרמיות מעידה על כוח שוק, אך יש לוודא שאינה באה על חשבון חיתום איכותי.",
-    "total_assets": "סך המאזן המאוחד (AUM).",
-    
-    # Solvency
-    "solvency_ratio": "יחס סולבנסי II. יחס < 100% דורש תוכנית הבראה מיידית. יחס < 115% הוא תמרור אזהרה.",
-    "scr": "Solvency Capital Requirement: ההון הנדרש לספיגת זעזועים של 1 ל-200 שנה.",
-    "tier1_capital": "הון עצמי איכותי (מניות+רווחים). צריך להיות לפחות 50% מה-SCR.",
-    
-    # Ratios
-    "combined_ratio": "יחס משולב בביטוח כללי (הפסדים + הוצאות / פרמיה). מעל 100% = הפסד חיתומי.",
-    "loss_ratio": "יחס תביעות (Loss Ratio). מודד את איכות החיתום נטו.",
-    "expense_ratio": "יחס הוצאות תפעול ועמלות. מודד יעילות תפעולית.",
-    "lcr": "Liquidity Coverage Ratio. יחס נזילות ל-30 יום. מתחת ל-1.0 מעיד על בעיית נזילות.",
-    "leverage": "מינוף פיננסי. יחס גבוה מעלה את הסיכון בתקופות משבר.",
-    "roi": "תשואה על ההשקעות (Return on Investment).",
-    
-    # IFRS 17
-    "new_business_csm": "הדלק החדש של החברה. ירידה כאן מעידה על קושי במכירת פוליסות רווחיות חדשות.",
-    "onerous_contracts": "קבוצות חוזים מפסידות ('עסקים מכבידים'). החברה מחויבת להכיר בהפסד מיידי בגינן.",
-    "paa_model": "מודל הקצאת פרמיה (PAA). משמש לחוזי ביטוח קצרי טווח (בעיקר כללי/בריאות).",
-    "gmm_model": "מודל כללי (GMM/VFA). משמש לחוזים ארוכי טווח (חיים/סיעוד). רגיש יותר לריבית.",
-    
-    # Investments
-    "unquoted_pct": "נכסים לא סחירים. קשים למימוש בעת משבר נזילות ושערוכם סובייקטיבי.",
-    "real_yield": "תשואה ריאלית בניכוי אינפלציה."
+    "net_profit": "הרווח הכולל לבעלי המניות (אחרי מס).",
+    "total_csm": "CSM: עתודת הרווחים העתידיים (המנוע של IFRS 17).",
+    "roe": "תשואה להון עצמי (במונחים שנתיים).",
+    "gross_premiums": "GWP: סך הפרמיות ברוטו.",
+    "total_assets": "AUM: סך המאזן המאוחד.",
+    "solvency_ratio": "יחס כושר פירעון כלכלי (כולל הוראות מעבר).",
+    "scr": "דרישת ההון הרגולטורית (SCR).",
+    "combined_ratio": "יחס משולב (תביעות + הוצאות / פרמיה).",
+    "loss_ratio": "יחס ההפסדים (תביעות / פרמיה).",
+    "lcr": "יחס כיסוי נזילות.",
+    "leverage": "מינוף פיננסי (הון למאזן).",
+    "new_business_csm": "תוספת CSM בגין עסקים חדשים.",
+    "onerous_contracts": "רכיב הפסד (חוזים מפסידים).",
+    "real_yield": "תשואה ריאלית על ההשקעות.",
+    "unquoted_pct": "שיעור נכסים לא סחירים."
 }
 
-# --- 2. עיצוב המערכת ---
-st.set_page_config(page_title="Regulator Cockpit", layout="wide")
+# --- 2. עיצוב המערכת (העיצוב המקורי והאהוב) ---
+st.set_page_config(page_title="Apex Regulator Pro", layout="wide")
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: white; }
-    .stMetric { background-color: #1c2e4a; padding: 10px; border-radius: 6px; border-right: 3px solid #2e7bcf; }
-    div[data-testid="stMetricValue"] { color: #fff; font-size: 1.4rem; }
-    .alert-box { padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; border: 1px solid; }
-    .alert-critical { background-color: #3d0808; border-color: #ff4b4b; color: #ff9999; }
-    .alert-warning { background-color: #3d3d08; border-color: #f0ad4e; color: #f0e68c; }
-    .alert-success { background-color: #083d08; border-color: #5cb85c; color: #dff0d8; }
-    .section-title { color: #2e7bcf; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 20px; font-size: 1.2rem; }
+    .stMetric { background-color: #1c2e4a; padding: 15px; border-radius: 8px; border-right: 4px solid #2e7bcf; box-shadow: 3px 3px 10px rgba(0,0,0,0.5); }
+    div[data-testid="stMetricValue"] { color: #ffffff !important; font-size: 1.8rem; font-family: 'Segoe UI', sans-serif; }
+    .ticker-wrap { background: #000000; color: #00ff00; padding: 12px; font-family: 'Courier New', monospace; border-bottom: 2px solid #2e7bcf; font-size: 1.1rem; }
+    .red-flag-box { border: 1px solid #ff4b4b; background-color: rgba(255, 75, 75, 0.15); padding: 15px; border-radius: 5px; color: #ff4b4b; margin-top: 10px; font-weight: bold; }
+    .css-1d391kg { padding-top: 1rem; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. נתוני אמת משוערים (Q3 2025) - מורחבים ---
+# סרגל בורסה (הוחזר למקור)
+ticker_text = (
+    "🌍 שווקים: ת\"א-35: 2,045.2 (+0.8%) ▲ | ת\"א-ביטוח: 2,540.1 (+1.4%) ▲ | "
+    "🇺🇸 S&P 500: 5,120.3 (+0.4%) ▲ | "
+    "🇮🇱 מניות ביטוח: הראל (+1.2%) | הפניקס (-0.5%) | מגדל (+0.8%) | כלל (+2.1%) | מנורה (+0.3%)"
+)
+st.markdown(f'<div class="ticker-wrap"><marquee scrollamount="12">{ticker_text}</marquee></div>', unsafe_allow_html=True)
+
+# --- 3. סכמה (Schema) ---
+IFRS17_SCHEMA = {
+    "type": "object",
+    "required": ["core_kpis", "ifrs17_segments", "investment_mix", "financial_ratios", "solvency", "consistency_check", "meta"],
+    "properties": {
+        "core_kpis": { "type": "object", "properties": { "net_profit": {"type": ["number", "null"]}, "total_csm": {"type": ["number", "null"]}, "roe": {"type": ["number", "null"]}, "gross_premiums": {"type": ["number", "null"]}, "total_assets": {"type": ["number", "null"]} } },
+        "ifrs17_segments": { "type": "object", "properties": { "life_csm": {"type": ["number", "null"]}, "health_csm": {"type": ["number", "null"]}, "general_csm": {"type": ["number", "null"]}, "onerous_contracts": {"type": ["number", "null"]}, "new_business_csm": {"type": ["number", "null"]} } },
+        "investment_mix": { "type": "object", "properties": { "govt_bonds_pct": {"type": ["number", "null"]}, "corp_bonds_pct": {"type": ["number", "null"]}, "stocks_pct": {"type": ["number", "null"]}, "real_estate_pct": {"type": ["number", "null"]}, "unquoted_pct": {"type": ["number", "null"]}, "real_yield": {"type": ["number", "null"]} } },
+        "financial_ratios": { "type": "object", "properties": { "loss_ratio": {"type": ["number", "null"]}, "combined_ratio": {"type": ["number", "null"]}, "lcr": {"type": ["number", "null"]}, "leverage": {"type": ["number", "null"]}, "roa": {"type": ["number", "null"]} } },
+        "solvency": { "type": "object", "properties": { "solvency_ratio": {"type": ["number", "null"]}, "tier1_capital": {"type": ["number", "null"]}, "tier2_capital": {"type": ["number", "null"]}, "scr": {"type": ["number", "null"]} } },
+        "consistency_check": { "type": "object", "properties": { "opening_csm": {"type": ["number", "null"]}, "new_business_csm": {"type": ["number", "null"]}, "csm_release": {"type": ["number", "null"]}, "closing_csm": {"type": ["number", "null"]} } },
+        "meta": { "type": "object", "properties": { "confidence": {"type": "number"}, "extraction_time": {"type": "string"} } }
+    }
+}
+
+# --- 4. נתוני אמת משוערים (Q3 2025) ---
 REAL_MARKET_DATA = {
     "Harel": {
         "core_kpis": { "net_profit": 2174.0, "total_csm": 17133.0, "roe": 27.0, "gross_premiums": 12100.0, "total_assets": 167754.0 },
-        "ifrs17_segments": { 
-            "life_csm": 11532.0, "health_csm": 5601.0, "general_csm": 0.0, 
-            "onerous_contracts": 0.0, "new_business_csm": 1265.0,
-            "models": {"PAA": 45, "GMM": 55} # אחוז שימוש במודלים
-        },
+        "ifrs17_segments": { "life_csm": 11532.0, "health_csm": 5601.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 1265.0, "models": {"PAA": 45, "GMM": 55} },
         "investment_mix": { "govt_bonds_pct": 30.0, "corp_bonds_pct": 20.0, "stocks_pct": 15.0, "real_estate_pct": 10.0, "unquoted_pct": 63.0, "real_yield": 4.2 },
-        "financial_ratios": { "loss_ratio": 76.0, "expense_ratio": 19.0, "combined_ratio": 95.0, "lcr": 1.35, "leverage": 6.9, "roa": 1.3, "roi": 4.5 },
+        "financial_ratios": { "loss_ratio": 76.0, "combined_ratio": 95.0, "lcr": 1.35, "leverage": 6.9, "roa": 1.3 },
         "solvency": { "solvency_ratio": 183.0, "tier1_capital": 10733.0, "tier2_capital": 2500.0, "scr": 9191.0 },
         "consistency_check": { "opening_csm": 16500.0, "new_business_csm": 1265.0, "csm_release": 632.0, "closing_csm": 17133.0 }
     },
     "Phoenix": {
         "core_kpis": { "net_profit": 1739.0, "total_csm": 13430.0, "roe": 33.3, "gross_premiums": 9278.0, "total_assets": 225593.0 },
-        "ifrs17_segments": { 
-            "life_csm": 6636.0, "health_csm": 6794.0, "general_csm": 0.0, 
-            "onerous_contracts": 0.0, "new_business_csm": 1459.0,
-            "models": {"PAA": 55, "GMM": 45}
-        },
+        "ifrs17_segments": { "life_csm": 6636.0, "health_csm": 6794.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 1459.0, "models": {"PAA": 55, "GMM": 45} },
         "investment_mix": { "govt_bonds_pct": 35.0, "corp_bonds_pct": 20.0, "stocks_pct": 14.0, "real_estate_pct": 10.0, "unquoted_pct": 31.0, "real_yield": 4.5 },
-        "financial_ratios": { "loss_ratio": 74.0, "expense_ratio": 18.0, "combined_ratio": 92.0, "lcr": 1.4, "leverage": 5.1, "roa": 0.8, "roi": 5.2 },
+        "financial_ratios": { "loss_ratio": 74.0, "combined_ratio": 92.0, "lcr": 1.4, "leverage": 5.1, "roa": 0.8 },
         "solvency": { "solvency_ratio": 183.0, "tier1_capital": 12500.0, "tier2_capital": 3889.0, "scr": 9192.0 },
         "consistency_check": { "opening_csm": 12500.0, "new_business_csm": 1459.0, "csm_release": 529.0, "closing_csm": 13430.0 }
     },
     "Migdal": {
         "core_kpis": { "net_profit": 551.0, "total_csm": 13062.0, "roe": 12.8, "gross_premiums": 7697.0, "total_assets": 219362.0 },
-        "ifrs17_segments": { 
-            "life_csm": 11500.0, "health_csm": 1562.0, "general_csm": 0.0, 
-            "onerous_contracts": 350.0, "new_business_csm": 795.0, # יש חוזים מפסידים!
-            "models": {"PAA": 20, "GMM": 80}
-        },
-        "investment_mix": { "govt_bonds_pct": 45.0, "corp_bonds_pct": 20.0, "stocks_pct": 13.0, "real_estate_pct": 10.0, "unquoted_pct": 17.0, "real_yield": 2.0 },
-        "financial_ratios": { "loss_ratio": 82.0, "expense_ratio": 20.0, "combined_ratio": 102.0, "lcr": 1.1, "leverage": 3.9, "roa": 0.3, "roi": 2.8 },
+        "ifrs17_segments": { "life_csm": 11500.0, "health_csm": 1562.0, "general_csm": 0.0, "onerous_contracts": 350.0, "new_business_csm": 795.0, "models": {"PAA": 20, "GMM": 80} },
+        "investment_mix": { "govt_bonds_pct": 45.0, "corp_bonds_pct": 20.0, "stocks_pct": 13.0, "real_estate_pct": 8.0, "unquoted_pct": 17.0, "real_yield": 2.0 },
+        "financial_ratios": { "loss_ratio": 82.0, "combined_ratio": 102.0, "lcr": 1.1, "leverage": 3.9, "roa": 0.3 },
         "solvency": { "solvency_ratio": 131.0, "tier1_capital": 7500.0, "tier2_capital": 3000.0, "scr": 13685.0 },
         "consistency_check": { "opening_csm": 12800.0, "new_business_csm": 795.0, "csm_release": 533.0, "closing_csm": 13062.0 }
     },
     "Clal": {
         "core_kpis": { "net_profit": 1360.0, "total_csm": 8813.0, "roe": 23.8, "gross_premiums": 8300.0, "total_assets": 158674.0 },
-        "ifrs17_segments": { 
-            "life_csm": 4076.0, "health_csm": 4737.0, "general_csm": 0.0, 
-            "onerous_contracts": 0.0, "new_business_csm": 950.0,
-            "models": {"PAA": 50, "GMM": 50}
-        },
+        "ifrs17_segments": { "life_csm": 4076.0, "health_csm": 4737.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 950.0, "models": {"PAA": 50, "GMM": 50} },
         "investment_mix": { "govt_bonds_pct": 20.0, "corp_bonds_pct": 12.0, "stocks_pct": 15.0, "real_estate_pct": 10.0, "unquoted_pct": 68.0, "real_yield": 3.8 },
-        "financial_ratios": { "loss_ratio": 78.0, "expense_ratio": 19.0, "combined_ratio": 97.0, "lcr": 1.25, "leverage": 4.8, "roa": 0.9, "roi": 4.1 },
+        "financial_ratios": { "loss_ratio": 78.0, "combined_ratio": 97.0, "lcr": 1.25, "leverage": 4.8, "roa": 0.9 },
         "solvency": { "solvency_ratio": 182.0, "tier1_capital": 11214.0, "tier2_capital": 4828.0, "scr": 10040.0 },
         "consistency_check": { "opening_csm": 8300.0, "new_business_csm": 950.0, "csm_release": 437.0, "closing_csm": 8813.0 }
     },
     "Menora": {
         "core_kpis": { "net_profit": 1211.0, "total_csm": 7900.0, "roe": 19.2, "gross_premiums": 6907.0, "total_assets": 62680.0 },
-        "ifrs17_segments": { 
-            "life_csm": 4500.0, "health_csm": 3400.0, "general_csm": 0.0, 
-            "onerous_contracts": 0.0, "new_business_csm": 300.0,
-            "models": {"PAA": 60, "GMM": 40}
-        },
+        "ifrs17_segments": { "life_csm": 4500.0, "health_csm": 3400.0, "general_csm": 0.0, "onerous_contracts": 0.0, "new_business_csm": 300.0, "models": {"PAA": 60, "GMM": 40} },
         "investment_mix": { "govt_bonds_pct": 40.0, "corp_bonds_pct": 25.0, "stocks_pct": 19.0, "real_estate_pct": 10.0, "unquoted_pct": 16.0, "real_yield": 4.1 },
-        "financial_ratios": { "loss_ratio": 75.0, "expense_ratio": 19.0, "combined_ratio": 94.0, "lcr": 1.45, "leverage": 13.1, "roa": 1.9, "roi": 4.8 },
+        "financial_ratios": { "loss_ratio": 75.0, "combined_ratio": 94.0, "lcr": 1.45, "leverage": 13.1, "roa": 1.9 },
         "solvency": { "solvency_ratio": 180.2, "tier1_capital": 6000.0, "tier2_capital": 2687.0, "scr": 6019.0 },
         "consistency_check": { "opening_csm": 7800.0, "new_business_csm": 300.0, "csm_release": 200.0, "closing_csm": 7900.0 }
     }
@@ -124,169 +111,191 @@ REAL_MARKET_DATA = {
 
 DEFAULT_MOCK = REAL_MARKET_DATA["Phoenix"]
 
-# --- 4. פונקציית דגלים אדומים (The Regulator Eye) ---
+# --- 5. פונקציית דגלים אדומים (חדש אך בעיצוב המקורי) ---
 def get_red_flags(data):
     flags = []
-    # Solvency Check
     sol = data['solvency']['solvency_ratio']
-    if sol < 100: flags.append(("CRITICAL", f"יחס סולבנסי קריטי: {sol}% (מתחת ל-100%) - נדרשת תוכנית הבראה!"))
-    elif sol < 135: flags.append(("WARNING", f"יחס סולבנסי נמוך: {sol}% (קרוב לרף המינימלי)."))
-    
-    # IFRS 17 Check
-    onerous = data['ifrs17_segments']['onerous_contracts']
-    if onerous > 0: flags.append(("WARNING", f"זוהו עסקים מכבידים (חוזים מפסידים) בהיקף {onerous}M₪."))
-    
-    # Investment Check
-    unquoted = data['investment_mix']['unquoted_pct']
-    if unquoted > 20: flags.append(("WARNING", f"חשיפה חריגה לנכסים לא סחירים: {unquoted}% (סיכון נזילות ושערוך)."))
-    
-    # Profitability Check
-    combined = data['financial_ratios']['combined_ratio']
-    if combined > 100: flags.append(("WARNING", f"הפסד חיתומי בביטוח כללי (Combined Ratio = {combined}%)."))
-    
+    if sol < 100: flags.append(("CRITICAL", f"🚨 סולבנסי קריטי: {sol}%"))
+    elif sol < 135: flags.append(("WARNING", f"⚠️ סולבנסי נמוך: {sol}%"))
+    if data['ifrs17_segments']['onerous_contracts'] > 0: flags.append(("WARNING", f"⚠️ חוזים מפסידים: {data['ifrs17_segments']['onerous_contracts']}M₪"))
+    if data['investment_mix']['unquoted_pct'] > 20: flags.append(("WARNING", f"⚠️ חשיפה ללא סחיר: {data['investment_mix']['unquoted_pct']}%"))
+    if data['financial_ratios']['combined_ratio'] > 100: flags.append(("WARNING", f"⚠️ הפסד חיתומי (Combined > 100%)"))
     return flags
 
-# --- 5. UI Application ---
+# --- 6. מנוע AI ---
+def analyze_report(file_path, api_key, retries=3):
+    if not os.path.exists(file_path): return None, f"קובץ חסר: {file_path}"
+    with open(file_path, "rb") as f: pdf_data = base64.b64encode(f.read()).decode('utf-8')
+    
+    system_prompt = """
+    You are an expert Israeli Insurance Regulator. Extract data from Hebrew IFRS 17 reports.
+    CRITICAL:
+    1. 'total_csm': "יתרת מרווח שירות חוזי".
+    2. 'new_business_csm': "תוספת בגין חוזים חדשים".
+    3. 'onerous_contracts': "רכיב הפסד".
+    4. 'solvency_ratio': Economic ratio ("בתקופת הפריסה").
+    5. 'unquoted_pct': Percentage of Level 3 assets ("רמה 3").
+    OUTPUT: JSON matching schema. Return null if missing.
+    """
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}"
+    payload = {"contents": [{"parts": [{"text": system_prompt}, {"inline_data": {"mime_type": "application/pdf", "data": pdf_data}}]}]}
+    
+    for attempt in range(retries):
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 200:
+                raw = response.json()['candidates'][0]['content']['parts'][0]['text']
+                data = json.loads(raw.replace('```json', '').replace('```', '').strip())
+                data["meta"]["extraction_time"] = datetime.utcnow().isoformat()
+                validate(instance=data, schema=IFRS17_SCHEMA)
+                return data, "success"
+            elif response.status_code in [429, 500]: time.sleep(2**attempt); continue
+            else: return None, f"API Error: {response.text}"
+        except Exception: time.sleep(1)
+    return None, "Connection Failed"
+
+# --- 7. פונקציית בנצ'מארק ---
+def get_benchmark_data(selected_companies):
+    data = {"חברה": [], "Solvency": [], "ROE": [], "CSM": []}
+    for comp in selected_companies:
+        comp_data = REAL_MARKET_DATA.get(comp, DEFAULT_MOCK)
+        data["חברה"].append(comp)
+        data["Solvency"].append(comp_data["solvency"]["solvency_ratio"])
+        data["ROE"].append(comp_data["core_kpis"]["roe"])
+        data["CSM"].append(comp_data["core_kpis"]["total_csm"])
+    return pd.DataFrame(data)
+
+# --- 8. UI ---
 st.sidebar.title("🛡️ Apex Regulator")
-company = st.sidebar.selectbox("חברה מפוקחת", ["Harel", "Phoenix", "Migdal", "Clal", "Menora"])
-use_sim = st.sidebar.checkbox("🧪 מצב סימולציה (Real Q3 Data)", value=True)
+api_key = st.secrets.get("GOOGLE_API_KEY")
+st.sidebar.header("הגדרות הרצה")
+company = st.sidebar.selectbox("חברה", ["Harel", "Phoenix", "Migdal", "Clal", "Menora"])
+use_sim = st.sidebar.checkbox("🧪 מצב סימולציה (Real Data)", value=True)
+st.sidebar.divider()
+st.sidebar.header("השוואה")
+compare_list = st.sidebar.multiselect("בחר מתחרים:", ["Harel", "Phoenix", "Migdal", "Clal", "Menora"], default=["Phoenix", "Migdal"])
 
-# כפתור הרצה
-if st.sidebar.button("🚀 הרץ ביקורת (Audit Run)"):
-    with st.spinner(f"טוען פרופיל סיכון עבור {company}..."):
-        time.sleep(0.8)
-        st.session_state.data = REAL_MARKET_DATA.get(company, DEFAULT_MOCK)
+st.title(f"דשבורד פיקוח: {company} (Q3 2025)")
 
-data = st.session_state.get('data')
+if "data" not in st.session_state: st.session_state.data = None
+
+if st.button("🚀 הרץ ניתוח מלא (Audit Run)"):
+    if use_sim:
+        with st.spinner("טוען נתונים..."):
+            time.sleep(1)
+            st.session_state.data = REAL_MARKET_DATA.get(company, DEFAULT_MOCK)
+    elif api_key:
+        path = f"data/{company}/2025/Q1/financial/financial_report.pdf"
+        res, status = analyze_report(path, api_key)
+        if status == "success": st.session_state.data = res
+        else: st.error(status)
+    else: st.error("חסר API Key")
+
+data = st.session_state.data
 def fmt(v, s=""): return f"{v:,.1f}{s}" if v is not None else "N/A"
 
-# --- Main Dashboard ---
 if data:
-    st.title(f"דוח פיקוח רגולטורי: {company} (Q3 2025)")
-    
-    # 1. דגלים אדומים (בראש העמוד)
+    # דגלים אדומים (בעיצוב אלגנטי)
     flags = get_red_flags(data)
     if flags:
-        st.subheader("🚩 התרעות פיקוח (Regulatory Alerts)")
         for level, msg in flags:
-            cls = "alert-critical" if level == "CRITICAL" else "alert-warning"
-            st.markdown(f'<div class="alert-box {cls}">{msg}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="alert-box alert-success">✅ לא זוהו חריגות רגולטוריות מהותיות.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="red-flag-box">{msg}</div>', unsafe_allow_html=True)
 
-    # 2. KPIs
+    # KPIs
+    k = data['core_kpis']
     cols = st.columns(5)
-    metrics = [("רווח כולל", "net_profit", "M₪"), ("יתרת CSM", "total_csm", "M₪"), ("סולבנסי", "solvency_ratio", "%", "solvency"), ("GWP", "gross_premiums", "M₪"), ("ROE", "roe", "%")]
+    metrics = [("רווח כולל", k.get('net_profit'), "M₪"), ("יתרת CSM", k.get('total_csm'), "M₪"), ("ROE", k.get('roe'), "%"), ("פרמיות", k.get('gross_premiums'), "M₪"), ("נכסים", k.get('total_assets'), "M₪")]
+    for i, (l, v, u) in enumerate(metrics):
+        cols[i].metric(l, fmt(v, u), help=DEFINITIONS.get(list(k.keys())[i], ""))
     
-    for i, item in enumerate(metrics):
-        val = data['solvency'][item[1]] if len(item) == 4 else data['core_kpis'][item[1]]
-        cols[i].metric(item[0], fmt(val, item[2]), help=DEFINITIONS.get(item[1], "מדד ביצוע"))
-
     st.divider()
-    tabs = st.tabs(["📊 IFRS 17 ומודלים", "🛡️ סולבנסי וסימולטור", "💰 השקעות ונזילות", "📉 יחסים פיננסיים", "⚖️ השוואה"])
 
-    # TAB 1: IFRS 17 (עם מודלים)
+    tabs = st.tabs(["📂 IFRS 17", "💰 השקעות", "🛡️ סולבנסי", "📉 יחסים", "⚖️ השוואה", "🕹️ סימולטור", "✅ אימות"])
+
+    # 1. IFRS 17 (עם המודלים!)
     with tabs[0]:
         s = data['ifrs17_segments']
-        c1, c2 = st.columns(2)
+        st.subheader("ניתוח רווחיות ומודלים")
+        c1, c2 = st.columns([2,1])
         with c1:
-            st.markdown("#### התפלגות CSM לפי מגזר")
-            fig = px.bar(x=["חיים", "בריאות", "כללי"], y=[s['life_csm'], s['health_csm'], s['general_csm']], labels={'y': 'CSM (M₪)', 'x': 'מגזר'})
+            fig = px.bar(x=["חיים", "בריאות", "כללי"], y=[s.get('life_csm',0), s.get('health_csm',0), s.get('general_csm',0)], title="יתרת CSM לפי מגזר")
             st.plotly_chart(fig, use_container_width=True)
         with c2:
-            st.markdown("#### מודלי מדידה (Measurement Models)")
-            # גרף דונאט למודלים
+            st.metric("CSM עסקים חדשים", fmt(s.get('new_business_csm'), "M₪"), help=DEFINITIONS["new_business_csm"])
+            # מודלים (דונאט)
             models = s.get('models', {"PAA": 50, "GMM": 50})
-            fig2 = px.pie(values=models.values(), names=models.keys(), hole=0.4, title="PAA (קצר) vs GMM (ארוך)")
+            fig2 = px.pie(values=models.values(), names=models.keys(), hole=0.5, title="PAA vs GMM")
+            fig2.update_layout(height=200, margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig2, use_container_width=True)
-        
-        st.info(f"**עסקים חדשים (New Business):** תוספת CSM בסך {fmt(s['new_business_csm'], 'M₪')}. זהו מנוע הצמיחה העתידי.")
-        if s['onerous_contracts'] > 0:
-            st.error(f"⚠️ **עסקים מכבידים:** הוכרו הפסדים בסך {fmt(s['onerous_contracts'], 'M₪')} בגין חוזים מפסידים.")
 
-    # TAB 2: Solvency & Simulator (מורחב!)
+    # 2. השקעות
     with tabs[1]:
-        sol = data['solvency']
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.markdown("#### יחס כושר פירעון")
-            st.metric("Solvency Ratio", fmt(sol['solvency_ratio'], "%"), help=DEFINITIONS['solvency_ratio'])
-            st.write(f"**SCR (הון נדרש):** {fmt(sol['scr'], 'M₪')}")
-            st.write(f"**עודף הון:** {fmt(sol['tier1_capital'] + sol['tier2_capital'] - sol['scr'], 'M₪')}")
-        with c2:
-            st.markdown("#### 🕹️ מבחני קיצון (Stress Test Simulator)")
-            st.caption("השפעה על Solvency ו-CSM")
-            
-            sc1, sc2 = st.columns(2)
-            rate_shock = sc1.slider("שינוי בריבית חסרת סיכון", -2.0, 2.0, 0.0, 0.5, format="%f%%")
-            equity_shock = sc2.slider("נפילה בשוק המניות", -40, 0, 0, 5, format="%f%%")
-            
-            # לוגיקה משופרת: ריבית משפיעה הפוך על חברות חיים (GMM), מניות פוגעות ב-Tier 1
-            sol_impact = (rate_shock * 12) + (equity_shock * 0.4) 
-            csm_impact = (rate_shock * 300) + (equity_shock * 50)
-            
-            new_sol = sol['solvency_ratio'] + sol_impact
-            new_csm = data['core_kpis']['total_csm'] + csm_impact
-            
-            m1, m2 = st.columns(2)
-            m1.metric("Solvency בתרחיש", fmt(new_sol, "%"), delta=fmt(sol_impact, "%"))
-            m2.metric("CSM בתרחיש", fmt(new_csm, "M₪"), delta=fmt(csm_impact, "M₪"))
-            
-            if new_sol < 100: st.error("🚨 התרחיש מוביל לכשל פירעון!")
-
-    # TAB 3: Investments
-    with tabs[2]:
         i = data['investment_mix']
         c1, c2 = st.columns(2)
         with c1:
-            fig = px.pie(values=[i['govt_bonds_pct'], i['corp_bonds_pct'], i['stocks_pct'], i['real_estate_pct'], i['unquoted_pct']],
-                         names=["ממשלתי", "קונצרני", "מניות", "נדל\"ן", "לא סחיר"], title="הקצאת נכסים (Asset Allocation)")
+            vals = [i.get('govt_bonds_pct',0), i.get('corp_bonds_pct',0), i.get('stocks_pct',0), i.get('real_estate_pct',0), i.get('unquoted_pct',0)]
+            fig = px.pie(values=vals, names=["ממשלתי", "קונצרני", "מניות", "נדל\"ן", "לא סחיר"], hole=0.4, title="הקצאת נכסים")
             st.plotly_chart(fig, use_container_width=True)
         with c2:
-            st.metric("ROI (תשואה על השקעות)", fmt(data['financial_ratios'].get('roi'), "%"), help=DEFINITIONS['roi'])
-            st.metric("נכסים לא סחירים", fmt(i['unquoted_pct'], "%"), help=DEFINITIONS['unquoted_pct'])
-            st.metric("תשואה ריאלית", fmt(i['real_yield'], "%"), help=DEFINITIONS['real_yield'])
+            st.metric("תשואה ריאלית", fmt(i.get('real_yield'), "%"), help=DEFINITIONS["real_yield"])
+            st.metric("חשיפה ללא סחיר", fmt(i.get('unquoted_pct'), "%"), help=DEFINITIONS["unquoted_pct"])
 
-    # TAB 4: Financial Ratios (מורחב)
+    # 3. סולבנסי
+    with tabs[2]:
+        sol = data['solvency']
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Solvency Ratio", fmt(sol.get('solvency_ratio'), "%"), help=DEFINITIONS["solvency_ratio"])
+            st.write(f"**SCR:** ₪{sol.get('scr',0)}M")
+        with c2:
+            df_cap = pd.DataFrame({"סוג": ["Tier 1", "Tier 2"], "סכום": [sol.get('tier1_capital',0), sol.get('tier2_capital',0)]})
+            st.plotly_chart(px.bar(df_cap, x="סוג", y="סכום", color="סוג", title="איכות הון"), use_container_width=True)
+
+    # 4. יחסים
     with tabs[3]:
         r = data['financial_ratios']
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("##### ⚙️ יעילות וחיתום")
-            st.metric("Combined Ratio", fmt(r['combined_ratio'], "%"), help=DEFINITIONS['combined_ratio'])
-            st.metric("Loss Ratio", fmt(r['loss_ratio'], "%"), help=DEFINITIONS['loss_ratio'])
-            st.metric("Expense Ratio", fmt(r.get('expense_ratio'), "%"), help=DEFINITIONS['expense_ratio'])
-            
-        with col2:
-            st.markdown("##### 💧 נזילות ומינוף")
-            st.metric("LCR (נזילות)", fmt(r['lcr']), help=DEFINITIONS['lcr'])
-            st.metric("מינוף פיננסי", fmt(r['leverage'], "%"), help=DEFINITIONS['leverage'])
-            
-        with col3:
-            st.markdown("##### 💰 רווחיות כוללת")
-            st.metric("ROE", fmt(data['core_kpis']['roe'], "%"), help=DEFINITIONS['roe'])
-            st.metric("ROA", fmt(r.get('roa'), "%"), "תשואה על הנכסים")
+        c1, c2 = st.columns(2)
+        c1.write(f"**Loss Ratio:** {fmt(r.get('loss_ratio'), '%')}")
+        c1.write(f"**Combined Ratio:** {fmt(r.get('combined_ratio'), '%')}")
+        c2.write(f"**LCR:** {fmt(r.get('lcr'))}")
+        c2.write(f"**ROA:** {fmt(r.get('roa'), '%')}")
 
-    # TAB 5: Benchmark
+    # 5. השוואה
     with tabs[4]:
-        st.subheader("מפת הסיכונים הענפית")
-        # יצירת דאטה-פריים להשוואה מתוך המאגר הקיים
-        bench_data = []
-        for c_name, c_data in REAL_MARKET_DATA.items():
-            bench_data.append({
-                "Company": c_name,
-                "Solvency": c_data['solvency']['solvency_ratio'],
-                "ROE": c_data['core_kpis']['roe'],
-                "CSM": c_data['core_kpis']['total_csm'],
-                "Combined": c_data['financial_ratios']['combined_ratio']
-            })
-        df = pd.DataFrame(bench_data)
-        
-        fig = px.scatter(df, x="Solvency", y="ROE", size="CSM", color="Combined", text="Company",
-                         title="Solvency (X) vs ROE (Y) | גודל=CSM | צבע=Combined Ratio",
-                         color_continuous_scale="RdYlGn_r") # ירוק לנמוך (טוב), אדום לגבוה (רע)
+        st.subheader("מפת השוואה")
+        full_list = list(set([company] + compare_list)) 
+        df_bench = get_benchmark_data(full_list)
+        fig = px.scatter(df_bench, x="Solvency", y="ROE", size="CSM", color="חברה", text="חברה", size_max=60)
         st.plotly_chart(fig, use_container_width=True)
 
-else:
-    st.info("אנא בחר חברה ולחץ על 'הרץ ביקורת' כדי לטעון את הדוח.")
+    # 6. סימולטור
+    with tabs[5]:
+        st.subheader("🕹️ סימולטור")
+        c1, c2 = st.columns(2)
+        with c1:
+            rate = st.slider("שינוי ריבית", -2.0, 2.0, 0.0)
+            market = st.slider("נפילה במניות", -30, 0, 0)
+        with c2:
+            lapse = st.slider("ביטולים (Lapse)", 0, 50, 0)
+            quake = st.checkbox("רעידת אדמה")
+        
+        # השפעה גם על סולבנסי!
+        sol_impact = (rate * 12) + (market * 0.4)
+        csm_impact = (rate * 250) + (market * 60) - (lapse * 120)
+        if quake: csm_impact -= 1500
+        
+        base_csm = k.get('total_csm', 0) or 0
+        base_sol = data['solvency']['solvency_ratio']
+        
+        m1, m2 = st.columns(2)
+        m1.metric("CSM חזוי", fmt(base_csm + csm_impact, "M₪"), delta=fmt(csm_impact, "M₪"))
+        m2.metric("Solvency חזוי", fmt(base_sol + sol_impact, "%"), delta=fmt(sol_impact, "%"))
+
+    # 7. אימות
+    with tabs[6]:
+        c = data['consistency_check']
+        calc = (c.get('opening_csm',0) or 0) + (c.get('new_business_csm',0) or 0) - (c.get('csm_release',0) or 0)
+        diff = (c.get('closing_csm',0) or 0) - calc
+        st.metric("פער חשבונאי", fmt(diff, "M₪"))
+        if abs(diff) < 2: st.success("✅ מאומת")
+        else: st.error("❌ כשל")
