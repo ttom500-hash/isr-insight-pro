@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# --- 1. עיצוב Deep Navy יוקרתי (שמירה על האפיון המקורי) ---
+# --- 1. עיצוב Deep Navy ואיפיון מקורי (נשמר בקפידה) ---
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
 
 st.markdown("""
@@ -21,16 +21,16 @@ st.markdown("""
 # --- 2. סרגל בורסה רץ ---
 st.markdown('<div class="ticker-wrap"><div class="ticker-move">📊 מדד ת"א ביטוח: +1.2% | הראל: ₪3,450 | הפניקס: ₪4,120 | מגדל: ₪620 | USD/ILS: 3.68 | ריבית ב"י: 4.5%</div></div>', unsafe_allow_html=True)
 
-# --- 3. חיבור יציב ל-v1 (פתרון ה-404 לפי הניתוח שלך) ---
+# --- 3. לוגיקת AI מתוקפת (למניעת 404) ---
 def init_ai():
     if "GOOGLE_API_KEY" in st.secrets:
         try:
-            # הגדרה גלובלית לשימוש ב-v1 היציב
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-            # אתחול המודל - הספריה החדשה תפנה אוטומטית ל-v1 אם לא צוין אחרת
+            # וידוא גרסה ב-Logs של Streamlit
+            st.sidebar.caption(f"SDK Version: {genai.__version__}")
             return genai.GenerativeModel('gemini-1.5-flash')
         except Exception as e:
-            st.error(f"שגיאת אתחול: {e}")
+            st.error(f"שגיאה באתחול: {e}")
     return None
 
 model = init_ai()
@@ -43,21 +43,16 @@ with st.sidebar:
     quarter = st.radio("רבעון", ["Q1", "Q2", "Q3"])
     st.divider()
     
-    # ניהול נתיב קבצים דינמי
-    base_path = f"data/{company}/{year}/{quarter}"
-    fin_file = f"{base_path}/financial/financial_report.pdf"
-    
-    if model:
-        st.success("מנוע AI מחובר (v1 Stable) ✅")
+    fin_file = f"data/{company}/{year}/{quarter}/financial/financial_report.pdf"
+    if model: st.success("מנוע AI מחובר ✅")
 
-# --- 5. גוף המערכת (Tabs לפי האפיון המקורי) ---
+# --- 5. גוף המערכת (Tabs המקוריים) ---
 st.title(f"ניתוח הוליסטי: {company}")
-
 tab1, tab2, tab3 = st.tabs(["📊 IFRS 17 ורווחיות", "🛡️ יציבות וסולבנסי", "🧪 סימולטור רגישות"])
 
 with tab1:
     st.subheader("ניתוח רווחיות ומגזרי פעילות (CSM)")
-    # 5 מדדי ה-KPI הקריטיים כפי שסיכמנו
+    # 5 מדדי ה-KPI של האפיון
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("רווח כולל", "₪---M")
     c2.metric("יתרת CSM", "₪---B")
@@ -66,17 +61,16 @@ with tab1:
     c5.metric("נכסים מנוהלים", "₪---B")
 
     if os.path.exists(fin_file):
-        st.success(f"✅ דוח כספי זוהה בנתיב המערכת")
+        st.success("✅ דוח כספי מזוהה")
         if st.button("🚀 הפעל סריקת AI עמוקה"):
-            with st.spinner("ה-AI מנתח את הדוח..."):
+            with st.spinner("ה-AI מנתח את הדוח בגרסת v1 היציבה..."):
                 try:
                     with open(fin_file, "rb") as f:
                         pdf_data = f.read()
                     
-                    # פקודה מובנית לשליפת נתונים
                     response = model.generate_content([
                         {"mime_type": "application/pdf", "data": pdf_data},
-                        f"Extract for {company} {quarter} {year}: Net Profit, CSM balance, ROE, Gross Premiums, Total Assets. Results in Hebrew."
+                        f"Analyze {company} {quarter} {year}. Extract: Net Profit, Total CSM, ROE, Gross Premiums. Results in Hebrew."
                     ])
                     st.markdown("---")
                     st.markdown("### 🔍 ממצאי הניתוח:")
@@ -84,14 +78,13 @@ with tab1:
                     st.balloons()
                 except Exception as e:
                     st.error(f"שגיאה בניתוח: {str(e)}")
+                    st.info("אם השגיאה היא 404, המתן דקה לסיום התקנת ה-Requirements החדשים.")
     else:
         st.warning(f"קובץ חסר בנתיב: {fin_file}")
 
 with tab2:
     st.subheader("מדדי Solvency II")
-    st.metric("יחס סולבנסי משוער", "---%", "יעד: >100%")
-    with st.popover("עזרה מקצועית למפקח"):
-        st.write("ניתוח הון מוכר מול דרישת הון SCR (Solvency Capital Requirement).")
+    st.metric("יחס סולבנסי", "---%", "יעד: >100%")
 
 with tab3:
     st.subheader("סימולטור תרחישי קיצון")
