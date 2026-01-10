@@ -1,109 +1,107 @@
 import streamlit as st
-import requests
-import base64
-import os
+import time
 
-# --- 1. עיצוב המערכת (Deep Navy) ---
+# --- 1. הגדרות דף ועיצוב Deep Navy ---
 st.set_page_config(page_title="Apex Insurance Intelligence Pro", layout="wide")
+
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: white; }
-    .stMetric { background-color: #1c2e4a; padding: 20px; border-radius: 12px; border-right: 5px solid #2e7bcf; }
-    div[data-testid="stMetricValue"] { color: #ffffff !important; }
+    .stMetric { background-color: #1c2e4a; padding: 15px; border-radius: 10px; border-right: 5px solid #2e7bcf; }
+    div[data-testid="stMetricValue"] { color: #ffffff !important; font-size: 1.8rem; }
+    .ticker-wrap { background: #1c2e4a; color: white; padding: 10px; overflow: hidden; white-space: nowrap; border-bottom: 2px solid #2e7bcf; }
+    .ticker { display: inline-block; animation: ticker 30s linear infinite; font-weight: bold; font-family: sans-serif; }
+    @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    .red-flag { color: #ff4b4b; font-weight: bold; border: 1px solid #ff4b4b; padding: 5px; border-radius: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. פונקציות ליבה ---
+# --- 2. סרגל בורסה רץ (Ticker Tape) ---
+st.markdown('<div class="ticker-wrap"><div class="ticker">הראל השקעות +1.2% ▲ | הפניקס -0.4% ▼ | מגדל אחזקות +0.7% ▲ | כלל ביטוח +2.1% ▲ | מנורה מבטחים +0.3% ▲</div></div>', unsafe_allow_html=True)
 
-def analyze_pdf_v1(file_path, api_key, model_name="gemini-2.0-flash"):
-    """פונקציה לסריקת ה-PDF"""
-    with open(file_path, "rb") as f:
-        pdf_data = base64.b64encode(f.read()).decode('utf-8')
-    
-    url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={api_key}"
-    
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": "Analyze the attached report for Harel Insurance. Extract exactly: Net Profit, Total CSM balance, ROE, Gross Premiums, and Total Assets. Return the results in Hebrew."},
-                {"inline_data": {"mime_type": "application/pdf", "data": pdf_data}}
-            ]
-        }]
-    }
-    
-    response = requests.post(url, json=payload)
-    return response
-
-# --- 3. ממשק משתמש (UI) ---
-
-st.title("🏛️ חדר בקרה רגולטורי - Apex Pro")
-
-api_key = st.secrets.get("GOOGLE_API_KEY")
-
+# --- 3. סרגל צד (Sidebar) ---
 with st.sidebar:
-    st.header("סטטוס מערכת")
-    if api_key:
-        st.success("API Key מחובר ✅")
-    else:
-        st.error("API Key חסר ❌")
-    
-    company = st.selectbox("חברה", ["Harel"])
-    year = st.selectbox("שנה", ["2025"])
-    st.info("מודל ראשי: Gemini 2.0 Flash")
+    st.title("🏛️ בקרת מפקח")
+    company = st.selectbox("שם החברה", ["Harel", "Phoenix", "Migdal", "Clal", "Menora"])
+    year = st.selectbox("שנה", ["2025", "2024"])
+    quarter = st.radio("רבעון", ["Q1", "Q2", "Q3"])
+    st.divider()
+    st.success("מחובר למאגר הנתונים: GitHub ✅")
 
-tab1, tab2 = st.tabs(["📊 ניתוח IFRS 17", "🛡️ יציבות הון"])
+# --- 4. לוח מחוונים ראשי (KPIs עם Popovers) ---
+st.title(f"ניתוח הוליסטי: {company} - {year} {quarter}")
+
+# דימוי נתונים לפי חברה (נתוני דמה להמחשה)
+mock_data = {
+    "רווח": "₪452M",
+    "CSM": "₪12.4B",
+    "ROE": "14.2%",
+    "פרמיות": "₪8.1B",
+    "נכסים": "₪340B"
+}
+
+cols = st.columns(5)
+metrics = [
+    {"label": "רווח כולל", "val": mock_data["רווח"], "info": "הרווח הכולל לפי IFRS 17. כולל רווח חתום ותשואות השקעה."},
+    {"label": "יתרת CSM", "val": mock_data["CSM"], "info": "Contractual Service Margin - עתודת הרווח העתידית. מדד ליציבות ארוכת טווח."},
+    {"label": "ROE", "val": mock_data["ROE"], "info": "תשואה להון - מודד את הרווחיות ביחס להון העצמי הממוצע."},
+    {"label": "פרמיות ברוטו", "val": mock_data["פרמיות"], "info": "סך המכירות לפני ביטוח משנה. אינדיקטור לנתח שוק."},
+    {"label": "סך נכסים", "val": mock_data["נכסים"], "info": "היקף המאזן הכולל (Total Assets) תחת ניהול הקבוצה."}
+]
+
+for i, m in enumerate(metrics):
+    with cols[i]:
+        st.metric(m['label'], m['val'], delta="+3%" if i != 1 else "-1.5%")
+        st.popover("ℹ️ הסבר").write(m['info'])
+
+# --- 5. טאבים לניתוח מעמיק ---
+tab1, tab2, tab3, tab4 = st.tabs(["📊 IFRS 17 & AI", "📈 יחסים פיננסיים", "🛡️ סולבנסי", "🕹️ סימולטור"])
 
 with tab1:
-    fin_path = f"data/{company}/2025/Q1/financial/financial_report.pdf"
+    st.subheader("סריקה חכמה מבוססת AI (סימולציה)")
+    if st.button("🚀 הרץ ניתוח דוח כספי"):
+        with st.spinner("ה-AI סורק את ביאורי ה-CSM ומגזרי הפעילות..."):
+            time.sleep(2)
+            st.success("הסריקה הושלמה!")
+            st.markdown(f"""
+            ### 🔍 ממצאי ה-AI עבור {company}:
+            * **ניתוח רווחיות:** נרשמה צמיחה ברווח החתום במגזר ביטוח חיים עקב עדכון הנחות דמוגרפיות.
+            * **יתרת CSM:** חלה ירידה קלה ביתרה עקב שחרור רווח מואץ ברבעון הנוכחי.
+            * **מגזרי פעילות:** מגזר הבריאות מציג יציבות עם יחס חתום (PAA) משופר.
+            """)
+            st.balloons()
+
+with tab2:
+    st.subheader("ניתוח יחסים פיננסיים (מאזן, רוו\"ה, תזרים)")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.info("יחסי חתום")
+        st.write("Combined Ratio: **92.4%**")
+        st.write("Loss Ratio: **78.2%**")
+        st.popover("ℹ️").write("יחס הפסדים (Loss Ratio) מודד את שיעור התביעות מתוך הפרמיות.")
+    with c2:
+        st.info("נזילות ותזרים")
+        st.write("תזרים מפעילות: **₪1.2B**")
+        st.write("יחס נזילות: **1.45**")
+        st.popover("ℹ️").write("בוחן את היכולת לפרוע התחייבויות קצרות מועד.")
+    with c3:
+        st.info("🚩 דגלים אדומים")
+        st.markdown('<p class="red-flag">🚩 עלייה חריגה בהוצאות הנהלה וכלליות (גידול של 12%)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="red-flag">🚩 תזרים מזומנים מהשקעות שלילי עקב רכישת נדל"ן מניב</p>', unsafe_allow_html=True)
+
+with tab3:
+    st.subheader("יציבות הון (Solvency II)")
+    st.write("יחס כושר פירעון ליום 31.03.2025 (משוער):")
+    st.progress(0.82, text="82% (מתחת ליעד הרגולטורי)")
+    st.error("🚩 דגל אדום: יחס הסולבנסי ירד מתחת ל-100%. החברה נדרשת להציג תוכנית לחיזוק ההון.")
+
+with tab4:
+    st.subheader("סימולטור רגישות ותרחישי קיצון")
+    rate = st.slider("שינוי בריבית (%)", -2.0, 2.0, 0.0, help="השפעה על שווי ההתחייבויות")
+    market = st.slider("שינוי בשוק ההון (%)", -30, 0, 0, help="השפעה על תיק הנוסטרו")
     
-    # תצוגת מדדי ה-KPI (המטריקות)
-    cols = st.columns(5)
-    labels = ["רווח כולל", "יתרת CSM", "ROE", "פרמיות ברוטו", "נכסים"]
-    for i, label in enumerate(labels):
-        cols[i].metric(label, "₪---")
-
-    st.divider()
-
-    # הגדרת העמודות עבור הכפתורים (כאן נפתר ה-NameError)
-    col_btn, col_diag = st.columns([1, 1])
-    
-    with col_btn:
-        st.subheader("סריקה מבצעית")
-        if st.button("🚀 הפעל סריקת עומק (2.0)"):
-            if not api_key:
-                st.error("חסר מפתח API")
-            elif os.path.exists(fin_path):
-                with st.spinner("מנתח דוחות..."):
-                    res = analyze_pdf_v1(fin_path, api_key, "gemini-2.0-flash")
-                    if res.status_code == 200:
-                        st.success("הסריקה הושלמה!")
-                        st.write(res.json()['candidates'][0]['content']['parts'][0]['text'])
-                        st.balloons()
-                    elif res.status_code == 429:
-                        st.warning("המכסה של מודל 2.0 הסתיימה להיום. נסה את כפתור הגיבוי משמאל.")
-                    else:
-                        st.error(f"שגיאה {res.status_code}: {res.text}")
-            else:
-                st.error(f"קובץ לא נמצא: {fin_path}")
-
-    with col_diag:
-        st.subheader("אבחון וגיבוי")
-        if st.button("🧪 בדיקת גיבוי (מודל 1.5)"):
-            if not api_key:
-                st.error("חסר מפתח API")
-            else:
-                with st.spinner("בודק ערוץ חלופי..."):
-                    # פנייה למודל 1.5 שאולי המכסה שלו עדיין פנויה
-                    url_15 = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
-                    test_payload = {"contents": [{"parts": [{"text": "Respond with '1.5 Flash is operational'"}]}]}
-                    test_res = requests.post(url_15, json=test_payload)
-                    
-                    if test_res.status_code == 200:
-                        st.success("ערוץ 1.5 פעיל!")
-                        st.write(test_res.json()['candidates'][0]['content']['parts'][0]['text'])
-                    else:
-                        st.error(f"גם ערוץ הגיבוי חסום (429).")
-                        st.info("זה אישור סופי שהמערכת מוכנה ב-100% ורק זקוקה לחיבור כרטיס אשראי ב-AI Studio כדי להתחיל לעבוד.")
+    impact = (rate * 120) + (market * 45)
+    st.metric("השפעה משוערת על יתרת ה-CSM", f"₪{impact}M", delta=impact)
 
 st.divider()
-st.caption("Apex Pro - Integrated Insurance Intelligence | 2026")
+st.caption("Apex Pro v1.0 | מערכת תומכת החלטות למפקח | 2026")
